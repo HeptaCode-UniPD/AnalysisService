@@ -69,12 +69,23 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 80,
+        "lines": 90,
+        "statements": 90
+      }
+    }
   },
   "lint-staged": {
+    "**/*.{ts,js,json,mjs}": [
+      "prettier --write"
+    ],
     "src/**/*.ts": [
-      "prettier --write",
-      "eslint --fix"
+      "eslint --fix",
+      "npm test -- --bail --findRelatedTests --coverage"
     ]
   }
 }

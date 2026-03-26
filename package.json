@@ -19,7 +19,6 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prepare": "husky",
-
     "sls:offline": "npm run build && serverless offline",
     "sls:deploy": "npm run build && serverless deploy"
   },
@@ -77,6 +76,12 @@
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
+    ],
+    "coveragePathIgnorePatterns": [
+      "main.ts",
+      "app.module.ts",
+      "node_modules",
+      ".module.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",

@@ -1,10 +1,13 @@
-import { Controller, Post, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, Inject } from '@nestjs/common';
 import { AppService } from './app.service';
 import {AnalysisRequestDto} from '../common/dto/analysis-request.dto'
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  
+  constructor(
+    @Inject(AppService) private readonly appService: AppService 
+  ) {}
 
   @Post('analyze') // Risponderà a POST /analyze
   @HttpCode(200)   // Rispondiamo subito con 200 OK

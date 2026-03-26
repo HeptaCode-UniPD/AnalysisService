@@ -6,13 +6,16 @@ provider:
   region: eu-central-1
   memorySize: 512
 
+build:
+  esbuild: false
+
 plugins:
   - serverless-step-functions
   - serverless-offline
 
 functions:
   wrapperAdapter:
-    handler: dist/wrapper/handler.startAnalysis # Punteremo al codice compilato da NestJS
+    handler: src/wrapper/handler.startAnalysis
     events:
       - http:
           path: /analyze

@@ -1,14 +1,14 @@
-name: "Verifica qualità del codice"
+name: 'Verifica qualità del codice'
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   verification:
-    name: "Static and Dynamic Analysis"
+    name: 'Static and Dynamic Analysis'
     runs-on: ubuntu-latest
 
     steps:

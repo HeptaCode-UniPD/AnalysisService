@@ -53,7 +53,9 @@ export default tseslint.config(
       ],
 
       // Altre regole per la Manutenibilità (Sezione 5.5.1)
-      'no-unused-vars': 'error',
+
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error'],
       'no-console': 'warn',
     },
   },

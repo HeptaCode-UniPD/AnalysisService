@@ -1,0 +1,19 @@
+service: ms2-analysis-service
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: eu-central-1
+  memorySize: 512
+
+plugins:
+  - serverless-step-functions
+  - serverless-offline
+
+functions:
+  wrapperAdapter:
+    handler: dist/wrapper/handler.startAnalysis # Punteremo al codice compilato da NestJS
+    events:
+      - http:
+          path: /analyze
+          method: post

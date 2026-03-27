@@ -5,5 +5,4 @@ import { AppService } from './wrapper/app.service';
 describe('AppController', () => {
   let appController: AppController;
   let appService: AppService;
-
 });

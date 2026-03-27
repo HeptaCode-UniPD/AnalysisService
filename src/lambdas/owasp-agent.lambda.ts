@@ -60,7 +60,7 @@ const readFileContent = tool({
 });
 
 // Schema Zod per l'evento Lambda in ingresso
-const DocAgentEventSchema = z.object({
+const OwaspAgentEventSchema = z.object({
   s3Bucket: z.string(),
   s3Key: z.string(),
   orchestratorRaw: z.string().optional(),
@@ -75,11 +75,11 @@ const OwaspAuditOutputSchema = z.object({
   files_analyzed: z.array(z.string()).describe("Lista dei file analizzati"),
 });
 
-export type DocAuditOutput = z.infer<typeof OwaspAuditOutputSchema>;
+export type OwaspAuditOutput = z.infer<typeof OwaspAuditOutputSchema>;
 
-export const docAgentHandler = async (event: unknown, context: unknown): Promise<DocAuditOutput> => {
+export const owaspAgentHandler = async (event: unknown, context: unknown): Promise<OwaspAuditOutput> => {
   // Validazione dell'evento in ingresso
-  const { s3Bucket: bucket, s3Key: key, orchestratorRaw } = DocAgentEventSchema.parse(event);
+  const { s3Bucket: bucket, s3Key: key, orchestratorRaw } = OwaspAgentEventSchema.parse(event);
 
     const systemInstruction = `You are an expert security auditor specialized in OWASP. 
     You have tools to explore the repository stored in S3. 
@@ -87,9 +87,10 @@ export const docAgentHandler = async (event: unknown, context: unknown): Promise
     2. Read critical files (like package.json, requirements.txt, server.js, auth logic).
     3. Analyze for OWASP vulnerabilities.
     
-    Respond ONLY with valid JSON matching the exact schema requested, no markdown.`;
+    Respond ONLY with valid JSON matching the exact schema requested, no markdown.:
+    ${JSON.stringify(OwaspAuditOutputSchema.shape)}`;
 
-  const docAgent = new Agent({
+  const owaspAgent = new Agent({
     name: "Documentation_Auditor",
     model: bedrockModel,
     systemPrompt: systemInstruction,
@@ -98,7 +99,7 @@ export const docAgentHandler = async (event: unknown, context: unknown): Promise
 
   const userPrompt = `Analyze Owasp vulnerabilities for repo in bucket '${bucket}' under prefix '${key}'. Context: ${orchestratorRaw ?? "none"}`;
   
-const finalResponse = await docAgent.invoke(userPrompt);
+const finalResponse = await owaspAgent.invoke(userPrompt);
 
 // Log the object to see its actual structure
 console.log("Agent Response Object:", JSON.stringify(finalResponse, null, 2));

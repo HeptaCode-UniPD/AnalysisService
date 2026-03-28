@@ -105,7 +105,8 @@
                 {
                   "Effect": "Allow",
                   "Action": [
-                    "s3:PutObject"
+                    "s3:PutObject",
+                    "s3:GetObject"
                   ],
                   "Resource": [
                     {
@@ -141,6 +142,13 @@
                     "lambda:InvokeFunction"
                   ],
                   "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel"
+                  ],
+                  "Resource": "*"
                 }
               ]
             }
@@ -167,7 +175,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/wrapper/handler.startAnalysis",
         "Runtime": "nodejs20.x",
@@ -197,13 +205,13 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/pull-repo.handler",
         "Runtime": "nodejs20.x",
         "FunctionName": "ms2-analysis-service-dev-pullRepoToS3",
-        "MemorySize": 1024,
-        "Timeout": 60,
+        "MemorySize": 2048,
+        "Timeout": 300,
         "Environment": {
           "Variables": {
             "S3_BUCKET_NAME": {
@@ -230,7 +238,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/webhook.handler",
         "Runtime": "nodejs20.x",
@@ -253,7 +261,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/orchestrator.lambda.orchestratorHandler",
         "Runtime": "nodejs20.x",
@@ -283,7 +291,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/owasp-agent.lambda.owaspAgentHandler",
         "Runtime": "nodejs20.x",
@@ -306,7 +314,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/test-agent.lamdbda.testAgentHandler",
         "Runtime": "nodejs20.x",
@@ -329,7 +337,7 @@
       "Properties": {
         "Code": {
           "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
-          "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+          "S3Key": "serverless/ms2-analysis-service/dev/1774719253061-2026-03-28T17:34:13.061Z/ms2-analysis-service.zip"
         },
         "Handler": "dist/lambdas/docs-agent.lambda.docAgentHandler",
         "Runtime": "nodejs20.x",
@@ -347,74 +355,74 @@
         "DocsAgentLogGroup"
       ]
     },
-    "WrapperAdapterLambdaVersionaQOKnDPdx9KXHaFU9DzqXhIjYte9sx17fYBrpRU85Q": {
+    "WrapperAdapterLambdaVersionFfwSvmACqBqfZqhNRDZOLSdMDlQFwYanDQbiFIHRhs": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "WrapperAdapterLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "PullRepoToS3LambdaVersion6uSGsZLtTZlEEENux8M2sMvJqESx1Cx0faW3SHftO4": {
+    "PullRepoToS3LambdaVersion6ArLa6lorzr3yQe5WoNn51D1UD4Ca3OAsnnRnVy88": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "PullRepoToS3LambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "WebhookSenderLambdaVersion1I6WRubHTgYJXUznu1OJI0vNEJFfzDTxc60awUrIJo": {
+    "WebhookSenderLambdaVersionDjqjdMeDxDMrTYWFCtw7lzNlntdM02qWazHBvMeLaI": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "WebhookSenderLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "OrchestratorLambdaVersionuNg0pAPOs3hVeSU1XPbwZb83Iiq7tgJuJPZGsu64": {
+    "OrchestratorLambdaVersion9S3peFOTCn6FNfSrUyk976NKqj4q9G1wYStp58nBp0": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "OrchestratorLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "OwaspAgentLambdaVersion2mUBQowYClSrEG5fDjgzI5SojDuzKpWNT4hV3N9NY": {
+    "OwaspAgentLambdaVersionhTOrG7tr3hjzsD1HhDadhsyDse1Ddog8QBmL83g4": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "OwaspAgentLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "TestAgentLambdaVersionfrcAmc8RUMD7js4JsAzue8dNyHYhC4WvTIC5lYRvok": {
+    "TestAgentLambdaVersionQdjAtmha74hvAT7lbZ0KcAaH1ykXkq6ANWS86wQLU": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "TestAgentLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
-    "DocsAgentLambdaVersionnMiQnG3aprvIeTHVIMbdpW2TcwVGxh6RBZt5o5Z8": {
+    "DocsAgentLambdaVersion8STCodlQopcoBP3zSzf8R8f8cAEqsU7z35nPbIPjyg": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "DocsAgentLambdaFunction"
         },
-        "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+        "CodeSha256": "rLbj/00IqY2PAXpdKFR5a1yBKd/z5zZo0G1wd3T0AdQ="
       }
     },
     "Ms2DashpipelineDashdevRole": {
@@ -549,7 +557,7 @@
         "WrapperAdapterLambdaPermissionApiGateway"
       ]
     },
-    "ApiGatewayDeployment1774716390333": {
+    "ApiGatewayDeployment1774719231419": {
       "Type": "AWS::ApiGateway::Deployment",
       "Properties": {
         "RestApiId": {
@@ -624,7 +632,7 @@
     "WrapperAdapterLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "WrapperAdapterLambdaVersionaQOKnDPdx9KXHaFU9DzqXhIjYte9sx17fYBrpRU85Q"
+        "Ref": "WrapperAdapterLambdaVersionFfwSvmACqBqfZqhNRDZOLSdMDlQFwYanDQbiFIHRhs"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-WrapperAdapterLambdaFunctionQualifiedArn"
@@ -633,7 +641,7 @@
     "PullRepoToS3LambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "PullRepoToS3LambdaVersion6uSGsZLtTZlEEENux8M2sMvJqESx1Cx0faW3SHftO4"
+        "Ref": "PullRepoToS3LambdaVersion6ArLa6lorzr3yQe5WoNn51D1UD4Ca3OAsnnRnVy88"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-PullRepoToS3LambdaFunctionQualifiedArn"
@@ -642,7 +650,7 @@
     "WebhookSenderLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "WebhookSenderLambdaVersion1I6WRubHTgYJXUznu1OJI0vNEJFfzDTxc60awUrIJo"
+        "Ref": "WebhookSenderLambdaVersionDjqjdMeDxDMrTYWFCtw7lzNlntdM02qWazHBvMeLaI"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-WebhookSenderLambdaFunctionQualifiedArn"
@@ -651,7 +659,7 @@
     "OrchestratorLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "OrchestratorLambdaVersionuNg0pAPOs3hVeSU1XPbwZb83Iiq7tgJuJPZGsu64"
+        "Ref": "OrchestratorLambdaVersion9S3peFOTCn6FNfSrUyk976NKqj4q9G1wYStp58nBp0"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-OrchestratorLambdaFunctionQualifiedArn"
@@ -660,7 +668,7 @@
     "OwaspAgentLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "OwaspAgentLambdaVersion2mUBQowYClSrEG5fDjgzI5SojDuzKpWNT4hV3N9NY"
+        "Ref": "OwaspAgentLambdaVersionhTOrG7tr3hjzsD1HhDadhsyDse1Ddog8QBmL83g4"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-OwaspAgentLambdaFunctionQualifiedArn"
@@ -669,7 +677,7 @@
     "TestAgentLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "TestAgentLambdaVersionfrcAmc8RUMD7js4JsAzue8dNyHYhC4WvTIC5lYRvok"
+        "Ref": "TestAgentLambdaVersionQdjAtmha74hvAT7lbZ0KcAaH1ykXkq6ANWS86wQLU"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-TestAgentLambdaFunctionQualifiedArn"
@@ -678,7 +686,7 @@
     "DocsAgentLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "DocsAgentLambdaVersionnMiQnG3aprvIeTHVIMbdpW2TcwVGxh6RBZt5o5Z8"
+        "Ref": "DocsAgentLambdaVersion8STCodlQopcoBP3zSzf8R8f8cAEqsU7z35nPbIPjyg"
       },
       "Export": {
         "Name": "sls-ms2-analysis-service-dev-DocsAgentLambdaFunctionQualifiedArn"

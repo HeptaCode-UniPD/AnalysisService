@@ -6,10 +6,11 @@ provider:
   region: eu-central-1
   memorySize: 512
   iamRoleStatements:
-    # Permesso per scrivere su S3 (per la Lambda pullRepo)
+    # Permesso per scrivere e leggere su S3 (per la Lambda pullRepo)
     - Effect: Allow
       Action:
         - s3:PutObject
+        - s3:GetObject
       Resource:
         - !Join ['', [!GetAtt RepositoryBucket.Arn, '/*']]
     # Permesso per il Wrapper NestJS di avviare la Step Function
@@ -22,6 +23,11 @@ provider:
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
+      Resource: "*"
+    # Permesso a tutte le lambda di interrogare l'intelligenza artificiale
+    - Effect: Allow
+      Action:
+        - bedrock:InvokeModel
       Resource: "*"
 
 package:
@@ -53,8 +59,8 @@ functions:
 
   pullRepoToS3:
     handler: dist/lambdas/pull-repo.handler
-    timeout: 60
-    memorySize: 1024
+    timeout: 300
+    memorySize: 2048
     environment:
       S3_BUCKET_NAME: !Ref RepositoryBucket
     layers:

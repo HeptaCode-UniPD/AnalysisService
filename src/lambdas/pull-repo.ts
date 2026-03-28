@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, rmSync, existsSync } from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import AdmZip from 'adm-zip';
 
 const s3Client = new S3Client({});
 
@@ -8,36 +9,29 @@ function processRepository(
   cloneUrl: string,
   commitSha: string,
   tmpDir: string,
-  tarPath: string,
+  zipPath: string,
 ): { hasChangelog: boolean; tags: string[]; branches: string[] } {
-  // Esegue git clone e checkout
   execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
   execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
 
-  // Estrae i metadati necessari all'orchestratore
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();
-  const branchesOutput = execSync('git branch -r', { cwd: tmpDir })
-    .toString()
-    .trim();
+  const branchesOutput = execSync('git branch -r', { cwd: tmpDir }).toString().trim();
 
   const repoMetadata = {
-    hasChangelog:
-      existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
+    hasChangelog: existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
     tags: tagsOutput ? tagsOutput.split('\n') : [],
-    branches: branchesOutput
-      ? branchesOutput.split('\n').map((b) => b.trim())
-      : [],
+    branches: branchesOutput ? branchesOutput.split('\n').map((b) => b.trim()) : [],
   };
 
-  // Comprime la cartella scaricata
-  execSync(`tar -czf ${tarPath} -C ${tmpDir} .`);
+  const zip = new AdmZip();
+  zip.addLocalFolder(tmpDir);
+  zip.writeZip(zipPath);
 
   return repoMetadata;
 }
 
-//funzione chiamata dalla lambda
 export const handler = async (event: any) => {
-  const { jobId, repoUrl, commitSha, userToken, s3Prefix } = event;
+  const { jobId, repoUrl, commitSha, s3Prefix } = event;
   const bucketName = process.env.S3_BUCKET_NAME;
 
   if (!bucketName) {
@@ -45,20 +39,15 @@ export const handler = async (event: any) => {
   }
 
   const tmpDir = `/tmp/repo-${jobId}`;
-  const tarPath = `/tmp/archive-${jobId}.tar.gz`;
+  // Estensione corretta in .zip
+  const zipPath = `/tmp/archive-${jobId}.zip`; 
 
   try {
-    // Processa la repo e recupera i metadati
-    const repoMetadata = processRepository(
-      repoUrl,
-      commitSha,
-      tmpDir,
-      tarPath,
-    );
+    const repoMetadata = processRepository(repoUrl, commitSha, tmpDir, zipPath);
 
-    // Legge il file compresso creato e lo carica su S3
-    const fileBuffer = readFileSync(tarPath);
-    const s3Key = `${s3Prefix}/source.tar.gz`;
+    const fileBuffer = readFileSync(zipPath);
+    // Cambiato s3Key per usare .zip invece di .tar.gz
+    const s3Key = `${s3Prefix}/source.zip`; 
 
     await s3Client.send(
       new PutObjectCommand({
@@ -77,8 +66,7 @@ export const handler = async (event: any) => {
     console.error('Errore esecuzione Lambda:', error);
     throw new Error(`Impossibile scaricare la repository: ${error.message}`);
   } finally {
-    // Svuota /tmp
     rmSync(tmpDir, { recursive: true, force: true });
-    rmSync(tarPath, { force: true });
+    rmSync(zipPath, { force: true });
   }
 };

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { tool } from '@strands-agents/sdk';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
@@ -15,7 +16,7 @@ export const listRepositoryFiles = tool({
   name: 'list_repository_files',
   description:
     'Usa questo tool per ottenere la lista completa di tutti i file presenti nel repository decompresso.',
-  inputSchema: z.toJSONSchema(FindAllFilesInput) as any,
+  inputSchema: zodToJsonSchema(FindAllFilesInput as any) as any,
   callback: async ({
     basePath,
   }: z.infer<typeof FindAllFilesInput>): Promise<string> => {

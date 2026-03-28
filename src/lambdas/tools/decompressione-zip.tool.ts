@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { execSync } from 'child_process';
@@ -52,6 +53,6 @@ export const unzipRepo = tool({
   name: 'unzip_repo',
   description:
     'Scarica un repository .zip da S3 e lo decompone nel file system temporaneo locale.',
-  inputSchema: z.toJSONSchema(UnzipRepoInput) as any,
+  inputSchema: zodToJsonSchema(UnzipRepoInput as any) as any,
   callback: executeUnzipRepo,
 });

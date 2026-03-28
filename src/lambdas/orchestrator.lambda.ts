@@ -2,6 +2,7 @@ import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Agent, tool } from '@strands-agents/sdk';
 import { BedrockModel } from '@strands-agents/sdk/bedrock';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION });
 
@@ -47,7 +48,7 @@ const runDocumentationAnalysis = tool({
   name: 'run_documentation_analysis',
   description:
     "Avvia l'analisi della documentazione. Usalo SOLO se determini dal contesto che il repository è una 'release'.",
-  inputSchema: z.toJSONSchema(SubAgentToolInput) as any,
+  inputSchema: zodToJsonSchema(SubAgentToolInput as any) as any,
   callback: async ({ bucket, key, context }: ToolInput): Promise<string> => {
     return await invokeAgentLambda(process.env.LAMBDA_DOCS_NAME!, {
       s3Bucket: bucket,

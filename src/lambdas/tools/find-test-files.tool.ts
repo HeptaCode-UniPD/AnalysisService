@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { tool } from '@strands-agents/sdk';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
@@ -15,7 +16,7 @@ export const findTestFiles = tool({
   name: 'find_test_files',
   description:
     'Ottiene la lista dei file di test (.test.ts, .spec.js, etc.) e configurazioni CI/CD.',
-  inputSchema: z.toJSONSchema(FindTestFilesInput) as any,
+  inputSchema: zodToJsonSchema(FindTestFilesInput as any) as any,
   callback: async ({
     basePath,
   }: z.infer<typeof FindTestFilesInput>): Promise<string> => {

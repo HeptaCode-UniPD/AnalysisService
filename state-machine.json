@@ -1,0 +1,69 @@
+{
+  "Comment": "Pipeline MS2: S3 Clone -> Orchestrator -> Webhook",
+  "StartAt": "Initialize",
+  "QueryLanguage": "JSONata",
+  "States": {
+    "Initialize": {
+      "Type": "Pass",
+      "Assign": {
+        "jobId": "{% $states.input.jobId %}",
+        "repoUrl": "{% $states.input.repoUrl %}",
+        "commitSha": "{% $states.input.commitSha %}",
+        "webhookUrl": "{% $states.input.webhookUrl %}",
+        "s3Prefix": "{% 'repos/' & $states.input.jobId & '/' & $states.input.commitSha %}"
+      },
+      "Next": "Pull Repo to S3"
+    },
+    "Pull Repo to S3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-pullRepoToS3",
+        "Payload": {
+          "jobId": "{% $jobId %}",
+          "repoUrl": "{% $repoUrl %}",
+          "commitSha": "{% $commitSha %}",
+          "s3Prefix": "{% $s3Prefix %}"
+        }
+      },
+      "Assign": {
+        "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
+        "s3Key": "{% $states.result.Payload.s3Key %}",
+        "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
+      },
+      "Next": "Run Orchestrator"
+    },
+    "Run Orchestrator": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
+        "Payload": {
+          "s3Bucket": "{% $s3Bucket %}",
+          "s3Key": "{% $s3Key %}",
+          "isRelease": "{% $count($repoMetadata.tags) > 0 or $repoMetadata.hasChangelog %}",
+          "orchestratorRaw": "{% 'Metadati Repo: ' & $string($repoMetadata) %}"
+        }
+      },
+      "Assign": {
+        "finalReport": "{% $states.result.Payload %}"
+      },
+      "Next": "Notify Webhook"
+    },
+    "Notify Webhook": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-webhookSender",
+        "Payload": {
+          "webhookUrl": "{% $webhookUrl %}",
+          "report": "{% $finalReport %}"
+        }
+      },
+      "Next": "Success"
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

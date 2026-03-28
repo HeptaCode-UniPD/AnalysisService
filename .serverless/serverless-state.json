@@ -1,0 +1,1010 @@
+{
+  "service": {
+    "service": "ms2-analysis-service",
+    "serviceObject": {
+      "name": "ms2-analysis-service"
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "nodejs20.x",
+      "region": "eu-central-1",
+      "memorySize": 512,
+      "iamRoleStatements": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject"
+          ],
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Fn::GetAtt": [
+                      "RepositoryBucket",
+                      "Arn"
+                    ]
+                  },
+                  "/*"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "states:StartExecution"
+          ],
+          "Resource": [
+            {
+              "Fn::Sub": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-dev"
+            }
+          ]
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "lambda:InvokeFunction"
+          ],
+          "Resource": "*"
+        }
+      ],
+      "stage": "dev",
+      "versionFunctions": true,
+      "compiledCloudFormationTemplate": {
+        "AWSTemplateFormatVersion": "2010-09-09",
+        "Description": "The AWS CloudFormation template for this Serverless application",
+        "Resources": {
+          "WrapperAdapterLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-wrapperAdapter"
+            }
+          },
+          "PullRepoToS3LogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-pullRepoToS3"
+            }
+          },
+          "WebhookSenderLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-webhookSender"
+            }
+          },
+          "OrchestratorLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-orchestrator"
+            }
+          },
+          "OwaspAgentLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-owaspAgent"
+            }
+          },
+          "TestAgentLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-testAgent"
+            }
+          },
+          "DocsAgentLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/ms2-analysis-service-dev-docsAgent"
+            }
+          },
+          "IamRoleLambdaExecution": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": [
+                        "lambda.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": {
+                    "Fn::Join": [
+                      "-",
+                      [
+                        "ms2-analysis-service",
+                        "dev",
+                        "lambda"
+                      ]
+                    ]
+                  },
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "logs:CreateLogStream",
+                          "logs:CreateLogGroup",
+                          "logs:TagResource"
+                        ],
+                        "Resource": [
+                          {
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ms2-analysis-service-dev*:*"
+                          }
+                        ]
+                      },
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "logs:PutLogEvents"
+                        ],
+                        "Resource": [
+                          {
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ms2-analysis-service-dev*:*:*"
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iamRoleStatements\"][0]"
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iamRoleStatements\"][1]"
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iamRoleStatements\"][2]"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "Path": "/",
+              "RoleName": {
+                "Fn::Join": [
+                  "-",
+                  [
+                    "ms2-analysis-service",
+                    "dev",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    "lambdaRole"
+                  ]
+                ]
+              }
+            }
+          },
+          "WrapperAdapterLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/wrapper/handler.startAnalysis",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-wrapperAdapter",
+              "MemorySize": 512,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "STATE_MACHINE_ARN": {
+                    "Fn::Sub": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-dev"
+                  }
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WrapperAdapterLogGroup"
+            ]
+          },
+          "PullRepoToS3LambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/pull-repo.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-pullRepoToS3",
+              "MemorySize": 1024,
+              "Timeout": 60,
+              "Environment": {
+                "Variables": {
+                  "S3_BUCKET_NAME": {
+                    "Ref": "RepositoryBucket"
+                  }
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              },
+              "Layers": [
+                "arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8"
+              ]
+            },
+            "DependsOn": [
+              "PullRepoToS3LogGroup"
+            ]
+          },
+          "WebhookSenderLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/webhook.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-webhookSender",
+              "MemorySize": 512,
+              "Timeout": 15,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WebhookSenderLogGroup"
+            ]
+          },
+          "OrchestratorLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/orchestrator.lambda.orchestratorHandler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-orchestrator",
+              "MemorySize": 512,
+              "Timeout": 300,
+              "Environment": {
+                "Variables": {
+                  "LAMBDA_OWASP_NAME": "ms2-analysis-service-dev-owaspAgent",
+                  "LAMBDA_TEST_NAME": "ms2-analysis-service-dev-testAgent",
+                  "LAMBDA_DOCS_NAME": "ms2-analysis-service-dev-docsAgent"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "OrchestratorLogGroup"
+            ]
+          },
+          "OwaspAgentLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/owasp-agent.lambda.owaspAgentHandler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-owaspAgent",
+              "MemorySize": 512,
+              "Timeout": 300,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "OwaspAgentLogGroup"
+            ]
+          },
+          "TestAgentLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/test-agent.lamdbda.testAgentHandler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-testAgent",
+              "MemorySize": 512,
+              "Timeout": 300,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "TestAgentLogGroup"
+            ]
+          },
+          "DocsAgentLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+                "S3Key": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z/ms2-analysis-service.zip"
+              },
+              "Handler": "dist/lambdas/docs-agent.lambda.docAgentHandler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "ms2-analysis-service-dev-docsAgent",
+              "MemorySize": 512,
+              "Timeout": 300,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "DocsAgentLogGroup"
+            ]
+          },
+          "WrapperAdapterLambdaVersionaQOKnDPdx9KXHaFU9DzqXhIjYte9sx17fYBrpRU85Q": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WrapperAdapterLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "PullRepoToS3LambdaVersion6uSGsZLtTZlEEENux8M2sMvJqESx1Cx0faW3SHftO4": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "PullRepoToS3LambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "WebhookSenderLambdaVersion1I6WRubHTgYJXUznu1OJI0vNEJFfzDTxc60awUrIJo": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WebhookSenderLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "OrchestratorLambdaVersionuNg0pAPOs3hVeSU1XPbwZb83Iiq7tgJuJPZGsu64": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "OrchestratorLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "OwaspAgentLambdaVersion2mUBQowYClSrEG5fDjgzI5SojDuzKpWNT4hV3N9NY": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "OwaspAgentLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "TestAgentLambdaVersionfrcAmc8RUMD7js4JsAzue8dNyHYhC4WvTIC5lYRvok": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "TestAgentLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "DocsAgentLambdaVersionnMiQnG3aprvIeTHVIMbdpW2TcwVGxh6RBZt5o5Z8": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "DocsAgentLambdaFunction"
+              },
+              "CodeSha256": "W38dNRju5axtABQlxA2RD65pGZvK9Wdarj8ZTCgfolw="
+            }
+          },
+          "Ms2DashpipelineDashdevRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": {
+                        "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+                      }
+                    },
+                    "Action": "sts:AssumeRole"
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": "dev-ms2-analysis-service-statemachine",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "lambda:InvokeFunction"
+                        ],
+                        "Resource": [
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3",
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3:*",
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator",
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator:*",
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender",
+                          "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender:*"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "Ms2DashpipelineDashdev": {
+            "Type": "AWS::StepFunctions::StateMachine",
+            "Properties": {
+              "DefinitionString": "{\n  \"Comment\": \"Pipeline MS2: S3 Clone -> Orchestrator -> Webhook\",\n  \"StartAt\": \"Initialize\",\n  \"QueryLanguage\": \"JSONata\",\n  \"States\": {\n    \"Initialize\": {\n      \"Type\": \"Pass\",\n      \"Assign\": {\n        \"jobId\": \"{% $states.input.jobId %}\",\n        \"repoUrl\": \"{% $states.input.repoUrl %}\",\n        \"commitSha\": \"{% $states.input.commitSha %}\",\n        \"webhookUrl\": \"{% $states.input.webhookUrl %}\",\n        \"s3Prefix\": \"{% 'repos/' & $states.input.jobId & '/' & $states.input.commitSha %}\"\n      },\n      \"Next\": \"Pull Repo to S3\"\n    },\n    \"Pull Repo to S3\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::lambda:invoke\",\n      \"Arguments\": {\n        \"FunctionName\": \"arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3\",\n        \"Payload\": {\n          \"jobId\": \"{% $jobId %}\",\n          \"repoUrl\": \"{% $repoUrl %}\",\n          \"commitSha\": \"{% $commitSha %}\",\n          \"s3Prefix\": \"{% $s3Prefix %}\"\n        }\n      },\n      \"Assign\": {\n        \"s3Bucket\": \"{% $states.result.Payload.s3Bucket %}\",\n        \"s3Key\": \"{% $states.result.Payload.s3Key %}\",\n        \"repoMetadata\": \"{% $states.result.Payload.repoMetadata %}\"\n      },\n      \"Next\": \"Run Orchestrator\"\n    },\n    \"Run Orchestrator\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::lambda:invoke\",\n      \"Arguments\": {\n        \"FunctionName\": \"arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator\",\n        \"Payload\": {\n          \"s3Bucket\": \"{% $s3Bucket %}\",\n          \"s3Key\": \"{% $s3Key %}\",\n          \"isRelease\": \"{% $count($repoMetadata.tags) > 0 or $repoMetadata.hasChangelog %}\",\n          \"orchestratorRaw\": \"{% 'Metadati Repo: ' & $string($repoMetadata) %}\"\n        }\n      },\n      \"Assign\": {\n        \"finalReport\": \"{% $states.result.Payload %}\"\n      },\n      \"Next\": \"Notify Webhook\"\n    },\n    \"Notify Webhook\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::lambda:invoke\",\n      \"Arguments\": {\n        \"FunctionName\": \"arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender\",\n        \"Payload\": {\n          \"webhookUrl\": \"{% $webhookUrl %}\",\n          \"report\": \"{% $finalReport %}\"\n        }\n      },\n      \"Next\": \"Success\"\n    },\n    \"Success\": {\n      \"Type\": \"Succeed\"\n    }\n  }\n}",
+              "RoleArn": {
+                "Fn::GetAtt": [
+                  "Ms2DashpipelineDashdevRole",
+                  "Arn"
+                ]
+              },
+              "StateMachineName": "ms2-pipeline-dev"
+            },
+            "DependsOn": [
+              "Ms2DashpipelineDashdevRole"
+            ]
+          },
+          "ApiGatewayRestApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+              "Name": "dev-ms2-analysis-service",
+              "EndpointConfiguration": {
+                "Types": [
+                  "EDGE"
+                ]
+              },
+              "Policy": ""
+            }
+          },
+          "ApiGatewayResourceAnalyze": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+              "ParentId": {
+                "Fn::GetAtt": [
+                  "ApiGatewayRestApi",
+                  "RootResourceId"
+                ]
+              },
+              "PathPart": "analyze",
+              "RestApiId": {
+                "Ref": "ApiGatewayRestApi"
+              }
+            }
+          },
+          "ApiGatewayMethodAnalyzePost": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+              "HttpMethod": "POST",
+              "RequestParameters": {},
+              "ResourceId": {
+                "Ref": "ApiGatewayResourceAnalyze"
+              },
+              "RestApiId": {
+                "Ref": "ApiGatewayRestApi"
+              },
+              "ApiKeyRequired": false,
+              "AuthorizationType": "NONE",
+              "Integration": {
+                "IntegrationHttpMethod": "POST",
+                "Type": "AWS_PROXY",
+                "Uri": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":lambda:path/2015-03-31/functions/",
+                      {
+                        "Fn::GetAtt": [
+                          "WrapperAdapterLambdaFunction",
+                          "Arn"
+                        ]
+                      },
+                      "/invocations"
+                    ]
+                  ]
+                }
+              },
+              "MethodResponses": []
+            },
+            "DependsOn": [
+              "WrapperAdapterLambdaPermissionApiGateway"
+            ]
+          },
+          "ApiGatewayDeployment1774716390333": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "ApiGatewayRestApi"
+              },
+              "StageName": "dev"
+            },
+            "DependsOn": [
+              "ApiGatewayMethodAnalyzePost"
+            ]
+          },
+          "WrapperAdapterLambdaPermissionApiGateway": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WrapperAdapterLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com",
+              "SourceArn": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":execute-api:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":",
+                    {
+                      "Ref": "ApiGatewayRestApi"
+                    },
+                    "/*/*"
+                  ]
+                ]
+              }
+            }
+          },
+          "RepositoryBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketName": "ms2-analysis-repos-bucket-dev-503104739946",
+              "LifecycleConfiguration": {
+                "Rules": [
+                  {
+                    "Id": "AutoDeleteOldZips",
+                    "Status": "Enabled",
+                    "ExpirationInDays": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "Outputs": {
+          "ServerlessDeploymentBucketName": {
+            "Value": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-ServerlessDeploymentBucketName"
+            }
+          },
+          "WrapperAdapterLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WrapperAdapterLambdaVersionaQOKnDPdx9KXHaFU9DzqXhIjYte9sx17fYBrpRU85Q"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-WrapperAdapterLambdaFunctionQualifiedArn"
+            }
+          },
+          "PullRepoToS3LambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "PullRepoToS3LambdaVersion6uSGsZLtTZlEEENux8M2sMvJqESx1Cx0faW3SHftO4"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-PullRepoToS3LambdaFunctionQualifiedArn"
+            }
+          },
+          "WebhookSenderLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WebhookSenderLambdaVersion1I6WRubHTgYJXUznu1OJI0vNEJFfzDTxc60awUrIJo"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-WebhookSenderLambdaFunctionQualifiedArn"
+            }
+          },
+          "OrchestratorLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "OrchestratorLambdaVersionuNg0pAPOs3hVeSU1XPbwZb83Iiq7tgJuJPZGsu64"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-OrchestratorLambdaFunctionQualifiedArn"
+            }
+          },
+          "OwaspAgentLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "OwaspAgentLambdaVersion2mUBQowYClSrEG5fDjgzI5SojDuzKpWNT4hV3N9NY"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-OwaspAgentLambdaFunctionQualifiedArn"
+            }
+          },
+          "TestAgentLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "TestAgentLambdaVersionfrcAmc8RUMD7js4JsAzue8dNyHYhC4WvTIC5lYRvok"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-TestAgentLambdaFunctionQualifiedArn"
+            }
+          },
+          "DocsAgentLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "DocsAgentLambdaVersionnMiQnG3aprvIeTHVIMbdpW2TcwVGxh6RBZt5o5Z8"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-DocsAgentLambdaFunctionQualifiedArn"
+            }
+          },
+          "Ms2DashpipelineDashdevArn": {
+            "Description": "Current StateMachine Arn",
+            "Value": {
+              "Ref": "Ms2DashpipelineDashdev"
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-Ms2DashpipelineDashdevArn"
+            }
+          },
+          "ServiceEndpoint": {
+            "Description": "URL of the service endpoint",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "https://",
+                  {
+                    "Ref": "ApiGatewayRestApi"
+                  },
+                  ".execute-api.",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  ".",
+                  {
+                    "Ref": "AWS::URLSuffix"
+                  },
+                  "/dev"
+                ]
+              ]
+            },
+            "Export": {
+              "Name": "sls-ms2-analysis-service-dev-ServiceEndpoint"
+            }
+          }
+        }
+      },
+      "vpc": {}
+    },
+    "plugins": [
+      "serverless-step-functions",
+      "serverless-offline"
+    ],
+    "pluginsData": {},
+    "functions": {
+      "wrapperAdapter": {
+        "handler": "dist/wrapper/handler.startAnalysis",
+        "environment": {
+          "STATE_MACHINE_ARN": {
+            "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"WrapperAdapterLambdaFunction\"][\"Properties\"][\"Environment\"][\"Variables\"][\"STATE_MACHINE_ARN\"]"
+          }
+        },
+        "events": [
+          {
+            "http": {
+              "path": "analyze",
+              "method": "post",
+              "integration": "AWS_PROXY"
+            }
+          }
+        ],
+        "name": "ms2-analysis-service-dev-wrapperAdapter",
+        "package": {},
+        "memory": 512,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WrapperAdapterLambdaVersionaQOKnDPdx9KXHaFU9DzqXhIjYte9sx17fYBrpRU85Q"
+      },
+      "pullRepoToS3": {
+        "handler": "dist/lambdas/pull-repo.handler",
+        "timeout": 60,
+        "memorySize": 1024,
+        "environment": {
+          "S3_BUCKET_NAME": {
+            "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"PullRepoToS3LambdaFunction\"][\"Properties\"][\"Environment\"][\"Variables\"][\"S3_BUCKET_NAME\"]"
+          }
+        },
+        "layers": {
+          "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"PullRepoToS3LambdaFunction\"][\"Properties\"][\"Layers\"]"
+        },
+        "events": [],
+        "name": "ms2-analysis-service-dev-pullRepoToS3",
+        "package": {},
+        "memory": 1024,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "PullRepoToS3LambdaVersion6uSGsZLtTZlEEENux8M2sMvJqESx1Cx0faW3SHftO4"
+      },
+      "webhookSender": {
+        "handler": "dist/lambdas/webhook.handler",
+        "timeout": 15,
+        "events": [],
+        "name": "ms2-analysis-service-dev-webhookSender",
+        "package": {},
+        "memory": 512,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WebhookSenderLambdaVersion1I6WRubHTgYJXUznu1OJI0vNEJFfzDTxc60awUrIJo"
+      },
+      "orchestrator": {
+        "handler": "dist/lambdas/orchestrator.lambda.orchestratorHandler",
+        "timeout": 300,
+        "environment": {
+          "LAMBDA_OWASP_NAME": "ms2-analysis-service-dev-owaspAgent",
+          "LAMBDA_TEST_NAME": "ms2-analysis-service-dev-testAgent",
+          "LAMBDA_DOCS_NAME": "ms2-analysis-service-dev-docsAgent"
+        },
+        "events": [],
+        "name": "ms2-analysis-service-dev-orchestrator",
+        "package": {},
+        "memory": 512,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "OrchestratorLambdaVersionuNg0pAPOs3hVeSU1XPbwZb83Iiq7tgJuJPZGsu64"
+      },
+      "owaspAgent": {
+        "handler": "dist/lambdas/owasp-agent.lambda.owaspAgentHandler",
+        "timeout": 300,
+        "events": [],
+        "name": "ms2-analysis-service-dev-owaspAgent",
+        "package": {},
+        "memory": 512,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "OwaspAgentLambdaVersion2mUBQowYClSrEG5fDjgzI5SojDuzKpWNT4hV3N9NY"
+      },
+      "testAgent": {
+        "handler": "dist/lambdas/test-agent.lamdbda.testAgentHandler",
+        "timeout": 300,
+        "events": [],
+        "name": "ms2-analysis-service-dev-testAgent",
+        "package": {},
+        "memory": 512,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "TestAgentLambdaVersionfrcAmc8RUMD7js4JsAzue8dNyHYhC4WvTIC5lYRvok"
+      },
+      "docsAgent": {
+        "handler": "dist/lambdas/docs-agent.lambda.docAgentHandler",
+        "timeout": 300,
+        "events": [],
+        "name": "ms2-analysis-service-dev-docsAgent",
+        "package": {},
+        "memory": 512,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "DocsAgentLambdaVersionnMiQnG3aprvIeTHVIMbdpW2TcwVGxh6RBZt5o5Z8"
+      }
+    },
+    "resources": {
+      "Resources": {
+        "RepositoryBucket": {
+          "Type": "AWS::S3::Bucket",
+          "Properties": {
+            "BucketName": "ms2-analysis-repos-bucket-dev-503104739946",
+            "LifecycleConfiguration": {
+              "Rules": [
+                {
+                  "Id": "AutoDeleteOldZips",
+                  "Status": "Enabled",
+                  "ExpirationInDays": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      "Outputs": {}
+    },
+    "configValidationMode": "warn",
+    "serviceFilename": "serverless",
+    "initialServerlessConfig": {
+      "service": "ms2-analysis-service",
+      "provider": {
+        "$ref": "$[\"service\"][\"provider\"]"
+      },
+      "package": {
+        "individually": false,
+        "patterns": [
+          "!src/**",
+          "!test/**",
+          "!.github/**",
+          "dist/**",
+          "node_modules/**"
+        ],
+        "artifactsS3KeyDirname": "serverless/ms2-analysis-service/dev/code-artifacts",
+        "deploymentBucket": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+        "artifact": "/Users/albertoreginato/Documents/AnalysisService/.serverless/ms2-analysis-service.zip",
+        "artifactDirectoryName": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z"
+      },
+      "build": {
+        "esbuild": false
+      },
+      "plugins": {
+        "$ref": "$[\"service\"][\"plugins\"]"
+      },
+      "functions": {
+        "$ref": "$[\"service\"][\"functions\"]"
+      },
+      "stepFunctions": {
+        "stateMachines": {
+          "RepoAnalysisStateMachine": {
+            "name": "ms2-pipeline-dev",
+            "definition": {
+              "Comment": "Pipeline MS2: S3 Clone -> Orchestrator -> Webhook",
+              "StartAt": "Initialize",
+              "QueryLanguage": "JSONata",
+              "States": {
+                "Initialize": {
+                  "Type": "Pass",
+                  "Assign": {
+                    "jobId": "{% $states.input.jobId %}",
+                    "repoUrl": "{% $states.input.repoUrl %}",
+                    "commitSha": "{% $states.input.commitSha %}",
+                    "webhookUrl": "{% $states.input.webhookUrl %}",
+                    "s3Prefix": "{% 'repos/' & $states.input.jobId & '/' & $states.input.commitSha %}"
+                  },
+                  "Next": "Pull Repo to S3"
+                },
+                "Pull Repo to S3": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3",
+                    "Payload": {
+                      "jobId": "{% $jobId %}",
+                      "repoUrl": "{% $repoUrl %}",
+                      "commitSha": "{% $commitSha %}",
+                      "s3Prefix": "{% $s3Prefix %}"
+                    }
+                  },
+                  "Assign": {
+                    "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
+                    "s3Key": "{% $states.result.Payload.s3Key %}",
+                    "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
+                  },
+                  "Next": "Run Orchestrator"
+                },
+                "Run Orchestrator": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator",
+                    "Payload": {
+                      "s3Bucket": "{% $s3Bucket %}",
+                      "s3Key": "{% $s3Key %}",
+                      "isRelease": "{% $count($repoMetadata.tags) > 0 or $repoMetadata.hasChangelog %}",
+                      "orchestratorRaw": "{% 'Metadati Repo: ' & $string($repoMetadata) %}"
+                    }
+                  },
+                  "Assign": {
+                    "finalReport": "{% $states.result.Payload %}"
+                  },
+                  "Next": "Notify Webhook"
+                },
+                "Notify Webhook": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender",
+                    "Payload": {
+                      "webhookUrl": "{% $webhookUrl %}",
+                      "report": "{% $finalReport %}"
+                    }
+                  },
+                  "Next": "Success"
+                },
+                "Success": {
+                  "Type": "Succeed"
+                }
+              }
+            }
+          }
+        }
+      },
+      "resources": {
+        "$ref": "$[\"service\"][\"resources\"]"
+      }
+    },
+    "appId": null,
+    "orgId": null,
+    "build": {
+      "$ref": "$[\"service\"][\"initialServerlessConfig\"][\"build\"]"
+    },
+    "layers": {},
+    "stepFunctions": {
+      "stateMachines": {
+        "$ref": "$[\"service\"][\"initialServerlessConfig\"][\"stepFunctions\"][\"stateMachines\"]"
+      },
+      "activities": []
+    },
+    "artifact": "/Users/albertoreginato/Documents/AnalysisService/.serverless/ms2-analysis-service.zip"
+  },
+  "package": {
+    "individually": false,
+    "artifactDirectoryName": "serverless/ms2-analysis-service/dev/1774716411985-2026-03-28T16:46:51.985Z",
+    "artifact": "ms2-analysis-service.zip"
+  }
+}

@@ -1,0 +1,379 @@
+{
+  "/Users/albertoreginato/Documents/AnalysisService/serverless.yml": {
+    "versionFramework": "4.33.0",
+    "servicePath": "/Users/albertoreginato/Documents/AnalysisService/serverless.yml",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "ms2-analysis-service",
+      "provider": {
+        "name": "aws",
+        "runtime": "nodejs20.x",
+        "region": "eu-central-1",
+        "memorySize": 512,
+        "iamRoleStatements": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:PutObject"
+            ],
+            "Resource": [
+              {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Fn::GetAtt": [
+                        "RepositoryBucket",
+                        "Arn"
+                      ]
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "states:StartExecution"
+            ],
+            "Resource": [
+              {
+                "Fn::Sub": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-dev"
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "lambda:InvokeFunction"
+            ],
+            "Resource": "*"
+          }
+        ],
+        "stage": "dev",
+        "versionFunctions": true
+      },
+      "package": {
+        "individually": false,
+        "patterns": [
+          "!src/**",
+          "!test/**",
+          "!.github/**",
+          "dist/**",
+          "node_modules/**"
+        ],
+        "artifactsS3KeyDirname": "serverless/ms2-analysis-service/dev/code-artifacts"
+      },
+      "build": {
+        "esbuild": false
+      },
+      "plugins": [
+        "serverless-step-functions",
+        "serverless-offline"
+      ],
+      "functions": {
+        "wrapperAdapter": {
+          "handler": "dist/wrapper/handler.startAnalysis",
+          "environment": {
+            "STATE_MACHINE_ARN": {
+              "Fn::Sub": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-dev"
+            }
+          },
+          "events": [
+            {
+              "http": {
+                "path": "/analyze",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "ms2-analysis-service-dev-wrapperAdapter"
+        },
+        "pullRepoToS3": {
+          "handler": "dist/lambdas/pull-repo.handler",
+          "timeout": 60,
+          "memorySize": 1024,
+          "environment": {
+            "S3_BUCKET_NAME": {
+              "Ref": "RepositoryBucket"
+            }
+          },
+          "layers": [
+            "arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8"
+          ],
+          "events": [],
+          "name": "ms2-analysis-service-dev-pullRepoToS3"
+        },
+        "webhookSender": {
+          "handler": "dist/lambdas/webhook.handler",
+          "timeout": 15,
+          "events": [],
+          "name": "ms2-analysis-service-dev-webhookSender"
+        },
+        "orchestrator": {
+          "handler": "dist/lambdas/orchestrator.lambda.orchestratorHandler",
+          "timeout": 300,
+          "environment": {
+            "LAMBDA_OWASP_NAME": "ms2-analysis-service-dev-owaspAgent",
+            "LAMBDA_TEST_NAME": "ms2-analysis-service-dev-testAgent",
+            "LAMBDA_DOCS_NAME": "ms2-analysis-service-dev-docsAgent"
+          },
+          "events": [],
+          "name": "ms2-analysis-service-dev-orchestrator"
+        },
+        "owaspAgent": {
+          "handler": "dist/lambdas/owasp-agent.lambda.owaspAgentHandler",
+          "timeout": 300,
+          "events": [],
+          "name": "ms2-analysis-service-dev-owaspAgent"
+        },
+        "testAgent": {
+          "handler": "dist/lambdas/test-agent.lamdbda.testAgentHandler",
+          "timeout": 300,
+          "events": [],
+          "name": "ms2-analysis-service-dev-testAgent"
+        },
+        "docsAgent": {
+          "handler": "dist/lambdas/docs-agent.lambda.docAgentHandler",
+          "timeout": 300,
+          "events": [],
+          "name": "ms2-analysis-service-dev-docsAgent"
+        }
+      },
+      "stepFunctions": {
+        "stateMachines": {
+          "RepoAnalysisStateMachine": {
+            "name": "ms2-pipeline-dev",
+            "definition": {
+              "Comment": "Pipeline MS2: S3 Clone -> Orchestrator -> Webhook",
+              "StartAt": "Initialize",
+              "QueryLanguage": "JSONata",
+              "States": {
+                "Initialize": {
+                  "Type": "Pass",
+                  "Assign": {
+                    "jobId": "{% $states.input.jobId %}",
+                    "repoUrl": "{% $states.input.repoUrl %}",
+                    "commitSha": "{% $states.input.commitSha %}",
+                    "webhookUrl": "{% $states.input.webhookUrl %}",
+                    "s3Prefix": "{% 'repos/' & $states.input.jobId & '/' & $states.input.commitSha %}"
+                  },
+                  "Next": "Pull Repo to S3"
+                },
+                "Pull Repo to S3": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3",
+                    "Payload": {
+                      "jobId": "{% $jobId %}",
+                      "repoUrl": "{% $repoUrl %}",
+                      "commitSha": "{% $commitSha %}",
+                      "s3Prefix": "{% $s3Prefix %}"
+                    }
+                  },
+                  "Assign": {
+                    "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
+                    "s3Key": "{% $states.result.Payload.s3Key %}",
+                    "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
+                  },
+                  "Next": "Run Orchestrator"
+                },
+                "Run Orchestrator": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator",
+                    "Payload": {
+                      "s3Bucket": "{% $s3Bucket %}",
+                      "s3Key": "{% $s3Key %}",
+                      "isRelease": "{% $count($repoMetadata.tags) > 0 or $repoMetadata.hasChangelog %}",
+                      "orchestratorRaw": "{% 'Metadati Repo: ' & $string($repoMetadata) %}"
+                    }
+                  },
+                  "Assign": {
+                    "finalReport": "{% $states.result.Payload %}"
+                  },
+                  "Next": "Notify Webhook"
+                },
+                "Notify Webhook": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Arguments": {
+                    "FunctionName": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender",
+                    "Payload": {
+                      "webhookUrl": "{% $webhookUrl %}",
+                      "report": "{% $finalReport %}"
+                    }
+                  },
+                  "Next": "Success"
+                },
+                "Success": {
+                  "Type": "Succeed"
+                }
+              }
+            }
+          }
+        }
+      },
+      "resources": {
+        "Resources": {
+          "RepositoryBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketName": "ms2-analysis-repos-bucket-dev-503104739946",
+              "LifecycleConfiguration": {
+                "Rules": [
+                  {
+                    "Id": "AutoDeleteOldZips",
+                    "Status": "Enabled",
+                    "ExpirationInDays": 1
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "nodejs20.x",
+      "region": "eu-central-1",
+      "memorySize": 512,
+      "iamRoleStatements": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject"
+          ],
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Fn::GetAtt": [
+                      "RepositoryBucket",
+                      "Arn"
+                    ]
+                  },
+                  "/*"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "states:StartExecution"
+          ],
+          "Resource": [
+            {
+              "Fn::Sub": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-dev"
+            }
+          ]
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "lambda:InvokeFunction"
+          ],
+          "Resource": "*"
+        }
+      ],
+      "stage": "dev",
+      "versionFunctions": true
+    },
+    "dashboard": {
+      "isEnabledForService": false,
+      "requiredAuthentication": false,
+      "orgFeaturesInUse": null,
+      "orgObservabilityIntegrations": null,
+      "serviceAppId": null,
+      "serviceProvider": null,
+      "instanceParameters": null
+    },
+    "serviceRawFile": "service: ms2-analysis-service\n\nprovider:\n  name: aws\n  runtime: nodejs20.x\n  region: eu-central-1\n  memorySize: 512\n  iamRoleStatements:\n    # Permesso per scrivere su S3 (per la Lambda pullRepo)\n    - Effect: Allow\n      Action:\n        - s3:PutObject\n      Resource:\n        - !Join ['', [!GetAtt RepositoryBucket.Arn, '/*']]\n    # Permesso per il Wrapper NestJS di avviare la Step Function\n    - Effect: Allow\n      Action:\n        - states:StartExecution\n      Resource:\n        - !Sub \"arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}\"\n    # Permesso all'Orchestratore di chiamare gli Agenti AI\n    - Effect: Allow\n      Action:\n        - lambda:InvokeFunction\n      Resource: \"*\"\n\npackage:\n  individually: false\n  patterns:\n    - '!src/**'\n    - '!test/**'\n    - '!.github/**'\n    - 'dist/**'\n    - 'node_modules/**'\n\nbuild:\n  esbuild: false\n\nplugins:\n  - serverless-step-functions\n  - serverless-offline\n\nfunctions:\n  wrapperAdapter:\n    handler: dist/wrapper/handler.startAnalysis\n    environment:\n      # Passiamo l'ARN dinamico della Step Function al codice NestJS\n      STATE_MACHINE_ARN: !Sub \"arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}\"\n    events:\n      - http:\n          path: /analyze\n          method: post\n\n  pullRepoToS3:\n    handler: dist/lambdas/pull-repo.handler\n    timeout: 60\n    memorySize: 1024\n    environment:\n      S3_BUCKET_NAME: !Ref RepositoryBucket\n    layers:\n      - arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8\n  \n  webhookSender:\n    handler: dist/lambdas/webhook.handler\n    timeout: 15\n  \n  orchestrator:\n    handler: dist/lambdas/orchestrator.lambda.orchestratorHandler\n    timeout: 300 # Diamo 5 minuti di tempo perché Claude deve leggere tutto!\n    environment:\n      # Passiamo i nomi esatti delle funzioni generate da Serverless Framework\n      LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent\n      LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent\n      LAMBDA_DOCS_NAME: ms2-analysis-service-${sls:stage}-docsAgent\n\n  owaspAgent:\n    handler: dist/lambdas/owasp-agent.lambda.owaspAgentHandler\n    timeout: 300\n\n  testAgent:\n    handler: dist/lambdas/test-agent.lamdbda.testAgentHandler\n    timeout: 300\n\n  docsAgent:\n    handler: dist/lambdas/docs-agent.lambda.docAgentHandler\n    timeout: 300\n\n# Definizione della Step Function\nstepFunctions:\n  stateMachines:\n    RepoAnalysisStateMachine:\n      name: ms2-pipeline-${sls:stage}\n      definition: ${file(state-machine.json)} \n\n# Creazione del Bucket S3\nresources:\n  Resources:\n    RepositoryBucket:\n      Type: AWS::S3::Bucket\n      Properties:\n        BucketName: ms2-analysis-repos-bucket-${sls:stage}-${aws:accountId}\n        LifecycleConfiguration:\n          Rules:\n            - Id: AutoDeleteOldZips\n              Status: Enabled\n              ExpirationInDays: 1",
+    "command": [
+      "logs"
+    ],
+    "options": {
+      "function": "wrapperAdapter"
+    },
+    "orgId": "ec819ccf-ca00-4f0d-b22a-02ea459dd4cc",
+    "orgName": "albelabs",
+    "userId": "Qt6Bk5gyfzymwSZ57b",
+    "userName": "albelabs",
+    "serviceProviderAwsAccountId": "503104739946",
+    "serviceProviderAwsCfStackName": "ms2-analysis-service-dev",
+    "serviceProviderAwsCfStackId": "arn:aws:cloudformation:eu-central-1:503104739946:stack/ms2-analysis-service-dev/408ebde0-2ac0-11f1-bca2-0a09e05a80d1",
+    "serviceProviderAwsCfStackCreated": "2026-03-28T16:07:43.427Z",
+    "serviceProviderAwsCfStackUpdated": "2026-03-28T16:48:13.335Z",
+    "serviceProviderAwsCfStackStatus": "UPDATE_COMPLETE",
+    "serviceProviderAwsCfStackOutputs": [
+      {
+        "OutputKey": "OwaspAgentLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-owaspAgent:1",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-OwaspAgentLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "Ms2DashpipelineDashdevArn",
+        "OutputValue": "arn:aws:states:eu-central-1:503104739946:stateMachine:ms2-pipeline-dev",
+        "Description": "Current StateMachine Arn",
+        "ExportName": "sls-ms2-analysis-service-dev-Ms2DashpipelineDashdevArn"
+      },
+      {
+        "OutputKey": "PullRepoToS3LambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-pullRepoToS3:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-PullRepoToS3LambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "TestAgentLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-testAgent:1",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-TestAgentLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "DocsAgentLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-docsAgent:1",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-DocsAgentLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "OrchestratorLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-orchestrator:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-OrchestratorLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "WrapperAdapterLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-wrapperAdapter:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-WrapperAdapterLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "WebhookSenderLambdaFunctionQualifiedArn",
+        "OutputValue": "arn:aws:lambda:eu-central-1:503104739946:function:ms2-analysis-service-dev-webhookSender:7",
+        "Description": "Current Lambda function version",
+        "ExportName": "sls-ms2-analysis-service-dev-WebhookSenderLambdaFunctionQualifiedArn"
+      },
+      {
+        "OutputKey": "ServiceEndpoint",
+        "OutputValue": "https://bs4ib3v7w3.execute-api.eu-central-1.amazonaws.com/dev",
+        "Description": "URL of the service endpoint",
+        "ExportName": "sls-ms2-analysis-service-dev-ServiceEndpoint"
+      },
+      {
+        "OutputKey": "ServerlessDeploymentBucketName",
+        "OutputValue": "serverless-framework-deployments-eu-central-1-8f45d705-234a",
+        "ExportName": "sls-ms2-analysis-service-dev-ServerlessDeploymentBucketName"
+      }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { tool } from '@strands-agents/sdk';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
@@ -14,7 +15,7 @@ export const findDocumentationFiles = tool({
   name: 'find_documentation_files',
   description:
     'Esplora la cartella locale del repository e restituisce i percorsi assoluti dei file di documentazione (es. .md, .txt, cartella docs/, CHANGELOG).',
-  inputSchema: z.toJSONSchema(FindDocumentationFilesInput) as any,
+  inputSchema: zodToJsonSchema(FindDocumentationFilesInput as any) as any,
   callback: async ({
     basePath,
   }: z.infer<typeof FindDocumentationFilesInput>): Promise<string> => {

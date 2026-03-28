@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { startStepFunctionExecution } from './adapters/aws-step-functions';
 
 @Injectable()
 export class AppService {
@@ -7,11 +8,15 @@ export class AppService {
       throw new BadRequestException('repoUrl e jobId sono obbligatori');
     }
 
-    console.log(
-      'Validazione superata. Simulo avvio Step Function per repo:',
-      payload.repoUrl,
-    );
+    console.log('Validazione superata. Avvio reale Step Function per repo:', payload.repoUrl);
 
-    return 'arn:aws:states:eu-central-1:123456789:execution:MyStateMachine:simulata';
+    try {
+      // Chiama la funzione che utilizza l'SDK AWS @aws-sdk/client-sfn
+      const executionArn = await startStepFunctionExecution(payload);
+      return executionArn;
+    } catch (error: any) {
+      console.error("Errore avvio Step Function:", error);
+      throw new Error("Impossibile contattare AWS Step Functions in questo ambiente.");
+    }
   }
 }

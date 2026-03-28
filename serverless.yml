@@ -5,14 +5,19 @@ provider:
   runtime: nodejs20.x
   region: eu-central-1
   memorySize: 512
-
-  # Permesso a tutte le funzioni di questo servizio di scrivere sul Bucket S3
   iamRoleStatements:
+    # Permesso per scrivere su S3 (per la Lambda pullRepo)
     - Effect: Allow
       Action:
         - s3:PutObject
       Resource:
         - !Join ['', [!GetAtt RepositoryBucket.Arn, '/*']]
+    # Permesso per il Wrapper NestJS di avviare la Step Function
+    - Effect: Allow
+      Action:
+        - states:StartExecution
+      Resource:
+        - !Ref RepoAnalysisStateMachine
 
 build:
   esbuild: false
@@ -24,12 +29,14 @@ plugins:
 functions:
   wrapperAdapter:
     handler: src/wrapper/handler.startAnalysis
+    environment:
+      # Passiamo l'ARN dinamico della Step Function al codice NestJS
+      STATE_MACHINE_ARN: !Ref RepoAnalysisStateMachine
     events:
       - http:
           path: /analyze
           method: post
 
-  # Lambda che scarica la repository
   pullRepoToS3:
     handler: dist/lambdas/pull-repo.handler
     timeout: 60
@@ -37,8 +44,14 @@ functions:
     environment:
       S3_BUCKET_NAME: !Ref RepositoryBucket
     layers:
-      # Eseguibile di git all'ambiente
       - arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8
+
+# Definizione della Step Function
+stepFunctions:
+  stateMachines:
+    RepoAnalysisStateMachine:
+      name: ms2-pipeline-${sls:stage}
+      definition: ${file(state-machine.json)} 
 
 # Creazione del Bucket S3
 resources:
@@ -46,7 +59,6 @@ resources:
     RepositoryBucket:
       Type: AWS::S3::Bucket
       Properties:
-        # Nome del bucket reso univoco a livello globale (fondamentale)
         BucketName: ms2-analysis-repos-bucket-${sls:stage}-${aws:accountId}
         LifecycleConfiguration:
           Rules:

@@ -4,16 +4,6 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const s3Client = new S3Client({});
 
-//restituisce url con token se presente
-function buildCloneUrl(repoUrl: string, userToken?: string): string {
-  if (!userToken) {
-    return repoUrl;
-  }
-  const urlObj = new URL(repoUrl);
-  urlObj.username = userToken;
-  return urlObj.toString();
-}
-
 function processRepository(
   cloneUrl: string,
   commitSha: string,
@@ -58,11 +48,9 @@ export const handler = async (event: any) => {
   const tarPath = `/tmp/archive-${jobId}.tar.gz`;
 
   try {
-    const cloneUrl = buildCloneUrl(repoUrl, userToken);
-
     // Processa la repo e recupera i metadati
     const repoMetadata = processRepository(
-      cloneUrl,
+      repoUrl,
       commitSha,
       tmpDir,
       tarPath,

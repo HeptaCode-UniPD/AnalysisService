@@ -13,11 +13,6 @@ export class AnalysisRequestDto {
   @IsNotEmpty()
   commitSha: string;
 
-  //token opzionale
-  @IsString()
-  @IsOptional()
-  userToken?: string;
-
   @IsUrl()
   @IsNotEmpty()
   webhookUrl: string;

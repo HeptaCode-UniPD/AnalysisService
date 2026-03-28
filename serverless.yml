@@ -71,24 +71,23 @@ functions:
     timeout: 15
   
   orchestrator:
-    handler: dist/lambdas/orchestrator.lambda.orchestratorHandler
-    timeout: 300 # Diamo 5 minuti di tempo perché Claude deve leggere tutto!
+    handler: dist/lambdas/orchestrator.orchestratorHandler
+    timeout: 300
     environment:
-      # Passiamo i nomi esatti delle funzioni generate da Serverless Framework
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
       LAMBDA_DOCS_NAME: ms2-analysis-service-${sls:stage}-docsAgent
 
   owaspAgent:
-    handler: dist/lambdas/owasp-agent.lambda.owaspAgentHandler
+    handler: dist/lambdas/owasp-agent.owaspAgentHandler
     timeout: 300
 
   testAgent:
-    handler: dist/lambdas/test-agent.lamdbda.testAgentHandler
+    handler: dist/lambdas/test-agent.testAgentHandler
     timeout: 300
 
   docsAgent:
-    handler: dist/lambdas/docs-agent.lambda.docAgentHandler
+    handler: dist/lambdas/docs-agent.docAgentHandler
     timeout: 300
 
 # Definizione della Step Function

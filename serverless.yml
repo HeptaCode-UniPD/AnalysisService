@@ -29,7 +29,7 @@ functions:
           path: /analyze
           method: post
 
-# Lambda che scarica la repository
+  # Lambda che scarica la repository
   pullRepoToS3:
     handler: dist/lambdas/pull-repo.handler
     timeout: 60

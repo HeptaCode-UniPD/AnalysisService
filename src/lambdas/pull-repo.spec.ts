@@ -20,13 +20,18 @@ describe('Lambda: pullRepoToS3', () => {
     repoUrl: 'https://github.com/owner/repo.git',
     commitSha: 'abcdef123456',
     s3Prefix: 'repos/12345/abcdef123456',
-    userToken: 'fake-token'
+    userToken: 'fake-token',
   };
 
   beforeEach(() => {
     // Impostiamo la variabile d'ambiente finta prima di ogni test
     process.env.S3_BUCKET_NAME = 'test-bucket';
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.clearAllMocks(); // Ripulisce lo storico delle chiamate fittizie
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('dovrebbe eseguire git clone, comprimere e caricare su S3', async () => {
@@ -46,9 +51,9 @@ describe('Lambda: pullRepoToS3', () => {
     // 3. Verifichiamo che i comandi di sistema siano stati lanciati con l'URL corretto (incluso il token)
     expect(execSync).toHaveBeenCalledWith(
       expect.stringContaining('https://fake-token@github.com/owner/repo.git'),
-      expect.anything() // Aggiungiamo questo per coprire l'oggetto { stdio: 'ignore' }
+      expect.anything(), // Aggiungiamo questo per coprire l'oggetto { stdio: 'ignore' }
     );
-    
+
     // Il comando tar non aveva un secondo argomento nel nostro codice, quindi questo rimane invariato
     expect(execSync).toHaveBeenCalledWith(expect.stringContaining('tar -czf'));
 
@@ -58,7 +63,9 @@ describe('Lambda: pullRepoToS3', () => {
 
   it('dovrebbe lanciare un errore se manca S3_BUCKET_NAME', async () => {
     delete process.env.S3_BUCKET_NAME;
-    await expect(handler(mockEvent)).rejects.toThrow('Configurazione mancante: S3_BUCKET_NAME');
+    await expect(handler(mockEvent)).rejects.toThrow(
+      'Configurazione mancante: S3_BUCKET_NAME',
+    );
   });
 
   it('dovrebbe funzionare correttamente per le repository pubbliche (senza userToken)', async () => {
@@ -73,12 +80,14 @@ describe('Lambda: pullRepoToS3', () => {
 
     // 2. Verifichiamo che l'URL usato sia quello originale pulito, senza '@'
     expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining('git clone https://github.com/owner/repo.git /tmp/repo-12345'),
-      expect.anything()
+      expect.stringContaining(
+        'git clone https://github.com/owner/repo.git /tmp/repo-12345',
+      ),
+      expect.anything(),
     );
   });
 
-  it('dovrebbe intercettare gli errori, lanciare un\'eccezione formattata e svuotare /tmp', async () => {
+  it("dovrebbe intercettare gli errori, lanciare un'eccezione formattata e svuotare /tmp", async () => {
     // 1. Forziamo il comando 'execSync' a fallire simulando un errore di Git
     (execSync as jest.Mock).mockImplementationOnce(() => {
       throw new Error('Git repository not found');
@@ -86,7 +95,7 @@ describe('Lambda: pullRepoToS3', () => {
 
     // 2. Verifichiamo che la Lambda catturi l'errore e lanci la nostra stringa personalizzata
     await expect(handler(mockEvent)).rejects.toThrow(
-      'Impossibile scaricare la repository: Git repository not found'
+      'Impossibile scaricare la repository: Git repository not found',
     );
 
     // 3. IMPORTANTISSIMO: Verifichiamo che il blocco 'finally' abbia comunque pulito la cartella /tmp

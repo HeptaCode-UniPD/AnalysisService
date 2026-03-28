@@ -14,24 +14,34 @@ function buildCloneUrl(repoUrl: string, userToken?: string): string {
   return urlObj.toString();
 }
 
-function processRepository(cloneUrl: string, commitSha: string, tmpDir: string, tarPath: string): { hasChangelog: boolean; tags: string[]; branches: string[] } {
+function processRepository(
+  cloneUrl: string,
+  commitSha: string,
+  tmpDir: string,
+  tarPath: string,
+): { hasChangelog: boolean; tags: string[]; branches: string[] } {
   // Esegue git clone e checkout
   execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
   execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
 
   // Estrae i metadati necessari all'orchestratore
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();
-  const branchesOutput = execSync('git branch -r', { cwd: tmpDir }).toString().trim();
+  const branchesOutput = execSync('git branch -r', { cwd: tmpDir })
+    .toString()
+    .trim();
 
   const repoMetadata = {
-    hasChangelog: existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
+    hasChangelog:
+      existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
     tags: tagsOutput ? tagsOutput.split('\n') : [],
-    branches: branchesOutput ? branchesOutput.split('\n').map(b => b.trim()) : [],
+    branches: branchesOutput
+      ? branchesOutput.split('\n').map((b) => b.trim())
+      : [],
   };
 
   // Comprime la cartella scaricata
   execSync(`tar -czf ${tarPath} -C ${tmpDir} .`);
-  
+
   return repoMetadata;
 }
 
@@ -49,26 +59,32 @@ export const handler = async (event: any) => {
 
   try {
     const cloneUrl = buildCloneUrl(repoUrl, userToken);
-    
+
     // Processa la repo e recupera i metadati
-    const repoMetadata = processRepository(cloneUrl, commitSha, tmpDir, tarPath);
+    const repoMetadata = processRepository(
+      cloneUrl,
+      commitSha,
+      tmpDir,
+      tarPath,
+    );
 
     // Legge il file compresso creato e lo carica su S3
     const fileBuffer = readFileSync(tarPath);
     const s3Key = `${s3Prefix}/source.tar.gz`;
 
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-      Body: fileBuffer,
-    }));
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: s3Key,
+        Body: fileBuffer,
+      }),
+    );
 
     return {
       s3Bucket: bucketName,
       s3Key: s3Key,
-      repoMetadata: repoMetadata
+      repoMetadata: repoMetadata,
     };
-
   } catch (error: any) {
     console.error('Errore esecuzione Lambda:', error);
     throw new Error(`Impossibile scaricare la repository: ${error.message}`);

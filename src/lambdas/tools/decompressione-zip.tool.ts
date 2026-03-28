@@ -1,0 +1,57 @@
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { tool } from '@strands-agents/sdk';
+import { z } from 'zod';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
+import { execSync } from 'child_process';
+import path from 'path';
+
+const s3Client = new S3Client({});
+
+const UnzipRepoInput = z.object({
+  bucket: z.string().describe('Il nome del bucket S3'),
+  zipKey: z
+    .string()
+    .describe('La chiave (percorso) del file .zip nel bucket S3'),
+});
+
+export const executeUnzipRepo = async ({
+  bucket,
+  zipKey,
+}: z.infer<typeof UnzipRepoInput>): Promise<string> => {
+  try {
+    const timestamp = Date.now();
+
+    const extractDirPath = path.join(
+      process.env.UNZIP_OUTPUT_DIR || '/tmp',
+      `extracted_${timestamp}`,
+    );
+    const zipFilePath = path.join(
+      process.env.UNZIP_OUTPUT_DIR || '/tmp',
+      `repo_${timestamp}.zip`,
+    );
+
+    const command = new GetObjectCommand({ Bucket: bucket, Key: zipKey });
+    const response = await s3Client.send(command);
+
+    if (!response.Body)
+      throw new Error('Il file scaricato è vuoto o inesistente.');
+
+    const writeStream = createWriteStream(zipFilePath);
+    await pipeline(response.Body as any, writeStream);
+
+    execSync(`unzip -q ${zipFilePath} -d ${extractDirPath} && rm ${zipFilePath}`);
+
+    return `Decompressione completata con successo. Il repository si trova nel percorso locale: ${extractDirPath}`;
+  } catch (error: any) {
+    return `Errore durante il download o la decompressione: ${error.message}`;
+  }
+};
+
+export const unzipRepo = tool({
+  name: 'unzip_repo',
+  description:
+    'Scarica un repository .zip da S3 e lo decompone nel file system temporaneo locale.',
+  inputSchema: z.toJSONSchema(UnzipRepoInput) as any,
+  callback: executeUnzipRepo,
+});

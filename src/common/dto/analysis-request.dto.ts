@@ -16,7 +16,7 @@ export class AnalysisRequestDto {
   //token opzionale
   @IsString()
   @IsOptional()
-  userToken?: string; 
+  userToken?: string;
 
   @IsUrl()
   @IsNotEmpty()

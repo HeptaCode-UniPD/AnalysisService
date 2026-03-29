@@ -28,7 +28,7 @@ const invokeAgentLambda = async (
 };
 
 const bedrockModel = new BedrockModel({
-  modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  modelId: 'amazon.nova-pro-v1:0',
   region: process.env.AWS_REGION,
 });
 

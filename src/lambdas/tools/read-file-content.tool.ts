@@ -18,9 +18,8 @@ export const readFileContent = tool({
     filePath,
   }: z.infer<typeof ReadFileContentInput>): Promise<string> => {
     try {
-      // Legge il file in locale con codifica utf-8
       const content = await readFile(filePath, 'utf-8');
-      return content || '';
+      return `----- ${filePath} -----\n${content || ''}`;
     } catch (error: any) {
       return `Errore durante la lettura del file ${filePath}: ${error.message}`;
     }

@@ -20,7 +20,6 @@ describe('Lambda: pullRepoToS3', () => {
     repoUrl: 'https://github.com/owner/repo.git',
     commitSha: 'abcdef123456',
     s3Prefix: 'repos/12345/abcdef123456',
-    userToken: 'fake-token',
   };
 
   beforeEach(() => {
@@ -50,7 +49,7 @@ describe('Lambda: pullRepoToS3', () => {
 
     // 3. Verifichiamo che i comandi di sistema siano stati lanciati con l'URL corretto (incluso il token)
     expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining('https://fake-token@github.com/owner/repo.git'),
+      expect.stringContaining('https://github.com/owner/repo.git'),
       expect.anything(), // Aggiungiamo questo per coprire l'oggetto { stdio: 'ignore' }
     );
 
@@ -68,25 +67,6 @@ describe('Lambda: pullRepoToS3', () => {
     );
   });
 
-  it('dovrebbe funzionare correttamente per le repository pubbliche (senza userToken)', async () => {
-    // 1. Prepariamo un evento finto SENZA il token
-    const { userToken, ...eventWithoutToken } = mockEvent;
-
-    (existsSync as jest.Mock).mockReturnValue(true);
-    (execSync as jest.Mock).mockReturnValue(Buffer.from(''));
-    (readFileSync as jest.Mock).mockReturnValue(Buffer.from('finto-file-zip'));
-
-    await handler(eventWithoutToken);
-
-    // 2. Verifichiamo che l'URL usato sia quello originale pulito, senza '@'
-    expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'git clone https://github.com/owner/repo.git /tmp/repo-12345',
-      ),
-      expect.anything(),
-    );
-  });
-
   it("dovrebbe intercettare gli errori, lanciare un'eccezione formattata e svuotare /tmp", async () => {
     // 1. Forziamo il comando 'execSync' a fallire simulando un errore di Git
     (execSync as jest.Mock).mockImplementationOnce(() => {
@@ -100,5 +80,36 @@ describe('Lambda: pullRepoToS3', () => {
 
     // 3. IMPORTANTISSIMO: Verifichiamo che il blocco 'finally' abbia comunque pulito la cartella /tmp
     expect(rmSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('dovrebbe restituire tags e branches vuoti se git non ne trova', async () => {
+    (existsSync as jest.Mock).mockReturnValue(false);
+    (execSync as jest.Mock).mockReturnValue(Buffer.from(''));
+    (readFileSync as jest.Mock).mockReturnValue(Buffer.from('finto-file-zip'));
+
+    const result = await handler(mockEvent);
+
+    expect(result.repoMetadata.hasChangelog).toBe(false);
+    expect(result.repoMetadata.tags).toEqual([]);
+    expect(result.repoMetadata.branches).toEqual([]);
+  });
+
+  it('dovrebbe parsare correttamente tags e branches multipli', async () => {
+    (existsSync as jest.Mock).mockReturnValue(false);
+    (execSync as jest.Mock)
+      .mockReturnValueOnce(Buffer.from(''))
+      .mockReturnValueOnce(Buffer.from(''))
+      .mockReturnValueOnce(Buffer.from('v1.0.0\nv1.1.0\nv2.0.0'))
+      .mockReturnValueOnce(Buffer.from('  origin/main\n  origin/develop'))
+      .mockReturnValueOnce(Buffer.from('')); // tar
+    (readFileSync as jest.Mock).mockReturnValue(Buffer.from('finto-file-zip'));
+
+    const result = await handler(mockEvent);
+
+    expect(result.repoMetadata.tags).toEqual(['v1.0.0', 'v1.1.0', 'v2.0.0']);
+    expect(result.repoMetadata.branches).toEqual([
+      'origin/main',
+      'origin/develop',
+    ]);
   });
 });

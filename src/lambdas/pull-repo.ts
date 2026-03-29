@@ -15,12 +15,17 @@ function processRepository(
   execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
 
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();
-  const branchesOutput = execSync('git branch -r', { cwd: tmpDir }).toString().trim();
+  const branchesOutput = execSync('git branch -r', { cwd: tmpDir })
+    .toString()
+    .trim();
 
   const repoMetadata = {
-    hasChangelog: existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
+    hasChangelog:
+      existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
     tags: tagsOutput ? tagsOutput.split('\n') : [],
-    branches: branchesOutput ? branchesOutput.split('\n').map((b) => b.trim()) : [],
+    branches: branchesOutput
+      ? branchesOutput.split('\n').map((b) => b.trim())
+      : [],
   };
 
   const zip = new AdmZip();
@@ -40,14 +45,14 @@ export const handler = async (event: any) => {
 
   const tmpDir = `/tmp/repo-${jobId}`;
   // Estensione corretta in .zip
-  const zipPath = `/tmp/archive-${jobId}.zip`; 
+  const zipPath = `/tmp/archive-${jobId}.zip`;
 
   try {
     const repoMetadata = processRepository(repoUrl, commitSha, tmpDir, zipPath);
 
     const fileBuffer = readFileSync(zipPath);
     // Cambiato s3Key per usare .zip invece di .tar.gz
-    const s3Key = `${s3Prefix}/source.zip`; 
+    const s3Key = `${s3Prefix}/source.zip`;
 
     await s3Client.send(
       new PutObjectCommand({

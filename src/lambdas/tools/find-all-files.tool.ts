@@ -25,8 +25,6 @@ export const listRepositoryFiles = tool({
 
       if (allFiles.length === 0) return 'Nessun file trovato nella cartella.';
 
-      // Restituiamo direttamente i percorsi assoluti separati da newline.
-      // In questo modo, l'agente può passare direttamente queste stringhe al tool 'read_file_content'.
       return allFiles.join('\n');
     } catch (error: any) {
       return `Errore durante la lettura della directory: ${error.message}`;

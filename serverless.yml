@@ -18,17 +18,18 @@ provider:
       Action:
         - states:StartExecution
       Resource:
-        - !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}"
+        - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
     # Permesso all'Orchestratore di chiamare gli Agenti AI
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
-      Resource: "*"
+      Resource: '*'
     # Permesso a tutte le lambda di interrogare l'intelligenza artificiale
     - Effect: Allow
       Action:
         - bedrock:InvokeModel
-      Resource: "*"
+        - bedrock:InvokeModelWithResponseStream
+      Resource: '*'
 
 package:
   individually: false
@@ -51,7 +52,7 @@ functions:
     handler: dist/wrapper/handler.startAnalysis
     environment:
       # Passiamo l'ARN dinamico della Step Function al codice NestJS
-      STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}"
+      STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
     events:
       - http:
           path: /analyze
@@ -65,29 +66,29 @@ functions:
       S3_BUCKET_NAME: !Ref RepositoryBucket
     layers:
       - arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8
-  
+
   webhookSender:
     handler: dist/lambdas/webhook.handler
     timeout: 15
-  
+
   orchestrator:
-    handler: dist/lambdas/orchestrator.orchestratorHandler
-    timeout: 300
+    handler: dist/lambdas/orchestrator-lambda.orchestratorHandler
+    timeout: 300 # Diamo 5 minuti di tempo perché Claude deve leggere tutto!
     environment:
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
       LAMBDA_DOCS_NAME: ms2-analysis-service-${sls:stage}-docsAgent
 
   owaspAgent:
-    handler: dist/lambdas/owasp-agent.owaspAgentHandler
+    handler: dist/lambdas/owasp-agent-lambda.owaspAgentHandler
     timeout: 300
 
   testAgent:
-    handler: dist/lambdas/test-agent.testAgentHandler
+    handler: dist/lambdas/test-agent-lambda.testAgentHandler
     timeout: 300
 
   docsAgent:
-    handler: dist/lambdas/docs-agent.docAgentHandler
+    handler: dist/lambdas/docs-agent-lambda.docAgentHandler
     timeout: 300
 
 # Definizione della Step Function
@@ -95,7 +96,7 @@ stepFunctions:
   stateMachines:
     RepoAnalysisStateMachine:
       name: ms2-pipeline-${sls:stage}
-      definition: ${file(state-machine.json)} 
+      definition: ${file(state-machine.json)}
 
 # Creazione del Bucket S3
 resources:

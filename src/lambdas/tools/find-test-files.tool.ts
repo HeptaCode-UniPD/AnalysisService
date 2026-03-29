@@ -11,7 +11,6 @@ const FindTestFilesInput = z.object({
     ),
 });
 
-// Tool specifico per i test
 export const findTestFiles = tool({
   name: 'find_test_files',
   description:

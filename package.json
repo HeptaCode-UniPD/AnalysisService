@@ -97,7 +97,12 @@
     "testTimeout": 30000,
     "collectCoverageFrom": [
       "**/*.(t|j)s"
-    ]
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov"
+    ],
+    "coverageDirectory": "../coverage"
   },
   "lint-staged": {
     "**/*.{ts,js,json,mjs}": [

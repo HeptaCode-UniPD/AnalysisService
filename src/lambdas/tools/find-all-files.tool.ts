@@ -1,33 +1,31 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { tool } from '@strands-agents/sdk';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
-// Schema Zod aggiornato: ora si aspetta la cartella locale invece di bucket/prefix
 const FindAllFilesInput = z.object({
-  basePath: z
-    .string()
-    .describe(
-      'Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)',
-    ),
+  basePath: z.string().describe('Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)'),
 });
 
-export const listRepositoryFiles = tool({
-  name: 'list_repository_files',
-  description:
-    'Usa questo tool per ottenere la lista completa di tutti i file presenti nel repository decompresso.',
-  inputSchema: zodToJsonSchema(FindAllFilesInput as any) as any,
-  callback: async ({
-    basePath,
-  }: z.infer<typeof FindAllFilesInput>): Promise<string> => {
-    try {
-      const allFiles = await getFilesRecursive(basePath);
+const callback = async ({ basePath }: z.infer<typeof FindAllFilesInput>): Promise<string> => {
+  try {
+    const allFiles = await getFilesRecursive(basePath);
+    if (allFiles.length === 0) return 'Nessun file trovato nella cartella.';
+    return allFiles.join('\n');
+  } catch (error: any) {
+    return `Errore durante la lettura della directory: ${error.message}`;
+  }
+};
 
-      if (allFiles.length === 0) return 'Nessun file trovato nella cartella.';
+// Factory async
+export const createListRepositoryFilesTool = async () => {
+  const { tool } = await import('@strands-agents/sdk');
+  return tool({
+    name: 'list_repository_files',
+    description: 'Usa questo tool per ottenere la lista completa di tutti i file presenti nel repository decompresso.',
+    inputSchema: zodToJsonSchema(FindAllFilesInput as any) as any,
+    callback,
+  });
+};
 
-      return allFiles.join('\n');
-    } catch (error: any) {
-      return `Errore durante la lettura della directory: ${error.message}`;
-    }
-  },
-});
+// Manteniamo per i test esistenti
+export const listRepositoryFiles = { callback };

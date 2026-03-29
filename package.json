@@ -19,7 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prepare": "husky",
-    "build:lambdas": "esbuild src/lambdas/orchestrator.ts src/lambdas/owasp-agent.ts src/lambdas/test-agent.ts src/lambdas/docs-agent.ts src/lambdas/pull-repo.ts src/lambdas/webhook.ts --bundle --platform=node --target=node20 --outdir=dist/lambdas --format=cjs --external:@aws-sdk/*",
+    "build:lambdas": "esbuild src/lambdas/orchestrator-lambda.ts src/lambdas/owasp-agent-lambda.ts src/lambdas/test-agent-lambda.ts src/lambdas/docs-agent-lambda.ts src/lambdas/pull-repo.ts src/lambdas/webhook.ts --bundle --platform=node --target=node20 --outdir=dist/lambdas --format=cjs --external:@aws-sdk/*",
     "sls:offline": "npm run build && serverless offline",
     "sls:deploy": "npm run build && npm run build:lambdas && serverless deploy"
   },

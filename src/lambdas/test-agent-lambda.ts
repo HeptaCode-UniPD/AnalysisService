@@ -1,55 +1,38 @@
 import { z } from 'zod';
+import { createUnzipRepoTool } from './tools/decompressione-zip.tool';
+import { createReadFileContentTool } from './tools/read-file-content.tool';
+import { createFindTestFilesTool } from './tools/find-test-files.tool';
 
-import { unzipRepo } from './tools/decompressione-zip.tool';
-import { readFileContent } from './tools/read-file-content.tool';
-import { findTestFiles } from './tools/find-test-files.tool';
-
-// Schema Zod per l'evento Lambda in ingresso
 const TestAgentEventSchema = z.object({
   s3Bucket: z.string(),
-  s3Key: z.string(), // Ora questa chiave punterà al file .zip
+  s3Key: z.string(),
   orchestratorRaw: z.string().optional(),
 });
 
-// Schema Zod per l'output atteso dall'agente
 const TestAuditOutputSchema = z.object({
   summary: z.string().describe('Sintesi generale della documentazione'),
-  completeness_score: z
-    .number()
-    .min(0)
-    .max(10)
-    .describe('Punteggio di completezza da 0 a 10'),
-  missing_sections: z
-    .array(z.string())
-    .describe('Sezioni mancanti nella documentazione'),
-  recommendations: z
-    .array(z.string())
-    .describe('Suggerimenti per migliorare la documentazione'),
+  completeness_score: z.number().min(0).max(10).describe('Punteggio di completezza da 0 a 10'),
+  missing_sections: z.array(z.string()).describe('Sezioni mancanti nella documentazione'),
+  recommendations: z.array(z.string()).describe('Suggerimenti per migliorare la documentazione'),
   files_analyzed: z.array(z.string()).describe('Lista dei file analizzati'),
 });
 
 export type TestAuditOutput = z.infer<typeof TestAuditOutputSchema>;
 
-export const testAgentHandler = async (
-  event: unknown,
-  context: unknown,
-): Promise<TestAuditOutput> => {
-
+export const testAgentHandler = async (event: unknown, context: unknown): Promise<TestAuditOutput> => {
   const { Agent } = await import('@strands-agents/sdk');
   const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
 
-  const bedrockModel = new BedrockModel({
-    modelId: 'us.amazon.nova-pro-v1:0',
-    region: 'us-east-1',
-  });
+  // ✅ Creiamo i tool tramite factory async
+  const [unzipRepo, findTestFiles, readFileContent] = await Promise.all([
+    createUnzipRepoTool(),
+    createFindTestFilesTool(),
+    createReadFileContentTool(),
+  ]);
 
-  const {
-    s3Bucket: bucket,
-    s3Key: key,
-    orchestratorRaw,
-  } = TestAgentEventSchema.parse(event);
+  const bedrockModel = new BedrockModel({ modelId: 'eu.amazon.nova-pro-v1:0', region: 'eu-central-1' });
+  const { s3Bucket: bucket, s3Key: key, orchestratorRaw } = TestAgentEventSchema.parse(event);
 
-  // System prompt aggiornato con la sequenza logica di decompressione ed esplorazione locale
   const systemInstruction = `You are an expert QA engineer and test coverage analyst.
     You must follow this exact sequence of steps to explore the repository:
     1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.
@@ -64,11 +47,9 @@ export const testAgentHandler = async (
     name: 'Test_Auditor',
     model: bedrockModel,
     systemPrompt: systemInstruction,
-    // Aggiunto unzipRepo all'array dei tools
     tools: [unzipRepo, findTestFiles, readFileContent],
   });
 
-  // Aggiornato il prompt utente per fare riferimento alla repo zippata
   const userPrompt = `Analyze test coverage for the zipped repo in bucket '${bucket}' with key '${key}'. Context: ${orchestratorRaw ?? 'none'}`;
 
   try {

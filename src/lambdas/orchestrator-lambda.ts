@@ -95,8 +95,8 @@ export const orchestratorHandler = async (
 
   // === INIZIALIZZAZIONE RISORSE STRANDS ===
   const bedrockModel = new BedrockModel({
-    modelId: 'us.amazon.nova-pro-v1:0',
-    region: 'us-east-1',
+    modelId: 'eu.amazon.nova-pro-v1:0',
+    region: 'eu-central-1',
   });
 
   const runDocumentationAnalysis = tool({
@@ -185,19 +185,33 @@ const systemInstruction = `You are a Lead Repository Auditor and Orchestrator.
   let finalResponse: any;
   try {
     finalResponse = await orchestratorAgent.invoke(userPrompt);
-  } catch (err: any) {
-    console.error('=== ERRORE ORCHESTRATORE RAW ===');
-    console.error('typeof err:', typeof err);
-    console.error('err keys:', Object.getOwnPropertyNames(err));
-    console.error('err stringified:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
-    if (err.cause) {
-      console.error('err.cause:', JSON.stringify(err.cause, Object.getOwnPropertyNames(err.cause), 2));
-    }
-    if (err.originalError) {
-      console.error('err.originalError:', JSON.stringify(err.originalError, Object.getOwnPropertyNames(err.originalError), 2));
-    }
-    throw new Error(`Orchestratore fallito: ${JSON.stringify(err, Object.getOwnPropertyNames(err), 2)}`);
+  }catch (err: any) {
+  console.error('=== ERRORE PROFONDO ===');
+  
+  // Scendi fino alla causa più profonda
+  let deepErr = err;
+  let depth = 0;
+  while (deepErr?.cause && depth < 5) {
+    deepErr = deepErr.cause;
+    depth++;
   }
+
+  // Il .message è un oggetto — proviamo a leggerlo come tale
+  const rawMessage = deepErr?.message;
+  console.error('rawMessage type:', typeof rawMessage);
+  console.error('rawMessage JSON:', JSON.stringify(rawMessage, null, 2));
+  console.error('rawMessage keys:', rawMessage && typeof rawMessage === 'object' 
+    ? Object.getOwnPropertyNames(rawMessage) 
+    : 'not an object');
+
+  // Prova a leggere tutte le props non enumerabili dell'errore radice
+  console.error('err all props:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+  console.error('err.cause all props:', err?.cause 
+    ? JSON.stringify(err.cause, Object.getOwnPropertyNames(err.cause), 2) 
+    : 'no cause');
+
+  throw new Error(`Orchestratore fallito: ${JSON.stringify(rawMessage)}`);
+}
 
   console.log("Risposta grezza dal modello:", JSON.stringify(finalResponse, null, 2));
   console.log("Tipo risposta:", typeof finalResponse);

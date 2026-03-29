@@ -1,54 +1,38 @@
 import { z } from 'zod';
-import { unzipRepo } from './tools/decompressione-zip.tool';
-import { readFileContent } from './tools/read-file-content.tool';
-import { findDocumentationFiles } from './tools/find-docs-files.tool';
+import { createUnzipRepoTool } from './tools/decompressione-zip.tool';
+import { createReadFileContentTool } from './tools/read-file-content.tool';
+import { createFindDocumentationFilesTool } from './tools/find-docs-files.tool';
 
-// Schema Zod per l'evento Lambda in ingresso
 const DocAgentEventSchema = z.object({
   s3Bucket: z.string(),
   s3Key: z.string(),
   orchestratorRaw: z.string().optional(),
 });
 
-// Schema Zod per l'output atteso dall'agente
 const DocAuditOutputSchema = z.object({
   summary: z.string().describe('Sintesi generale della documentazione'),
-  completeness_score: z
-    .number()
-    .min(0)
-    .max(10)
-    .describe('Punteggio di completezza da 0 a 10'),
-  missing_sections: z
-    .array(z.string())
-    .describe('Sezioni mancanti nella documentazione'),
-  recommendations: z
-    .array(z.string())
-    .describe('Suggerimenti per migliorare la documentazione'),
+  completeness_score: z.number().min(0).max(10).describe('Punteggio di completezza da 0 a 10'),
+  missing_sections: z.array(z.string()).describe('Sezioni mancanti nella documentazione'),
+  recommendations: z.array(z.string()).describe('Suggerimenti per migliorare la documentazione'),
   files_analyzed: z.array(z.string()).describe('Lista dei file analizzati'),
 });
 
 export type DocAuditOutput = z.infer<typeof DocAuditOutputSchema>;
 
-export const docAgentHandler = async (
-  event: unknown,
-  context: unknown,
-): Promise<DocAuditOutput> => {
-  
+export const docAgentHandler = async (event: unknown, context: unknown): Promise<DocAuditOutput> => {
   const { Agent } = await import('@strands-agents/sdk');
   const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
 
-  const bedrockModel = new BedrockModel({
-    modelId: 'us.amazon.nova-pro-v1:0',
-    region: 'us-east-1',
-  });
+  // ✅ Creiamo i tool tramite factory async
+  const [unzipRepo, findDocumentationFiles, readFileContent] = await Promise.all([
+    createUnzipRepoTool(),
+    createFindDocumentationFilesTool(),
+    createReadFileContentTool(),
+  ]);
 
-  const {
-    s3Bucket: bucket,
-    s3Key: key,
-    orchestratorRaw,
-  } = DocAgentEventSchema.parse(event);
+  const bedrockModel = new BedrockModel({ modelId: 'eu.amazon.nova-pro-v1:0', region: 'eu-central-1' });
+  const { s3Bucket: bucket, s3Key: key, orchestratorRaw } = DocAgentEventSchema.parse(event);
 
-  // Il nuovo prompt istruisce l'agente sulla catena esatta di strumenti da usare
   const systemInstruction = `You are an expert technical writer and documentation auditor. 
     You must follow this exact sequence of steps to explore the repository:
     1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.

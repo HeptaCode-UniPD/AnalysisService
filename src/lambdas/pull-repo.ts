@@ -12,7 +12,11 @@ function processRepository(
 ): { metadata: { hasChangelog: boolean; tags: string[]; branches: string[] }, zipBuffer: Buffer } {
   // 1. Clona e fai il checkout
   execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
-  execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
+  try {
+    execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
+  } catch (e) {
+    console.warn(`ATTENZIONE: Checkout di ${commitSha} fallito. Procedo con il ramo di default.`);
+  }
 
   // 2. Estrai i metadati necessari
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();

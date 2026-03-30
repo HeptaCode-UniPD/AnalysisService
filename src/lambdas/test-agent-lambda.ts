@@ -15,7 +15,7 @@ const TestAgentEventSchema = z.object({
   s3Prefix: z.string(),
 });
 
-const AGENT_ID = process.env.TEST_AGENT_ID || 'YXOPMZZZBU';
+const AGENT_ID = process.env.TEST_AGENT_ID || 'L3EB5WS1ZU';
 const AGENT_ALIAS_ID = process.env.TEST_AGENT_ALIAS_ID || 'TSTALIASID';
 
 export const testAgentHandler = async (event: unknown) => {

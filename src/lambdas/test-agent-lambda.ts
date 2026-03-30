@@ -92,10 +92,12 @@ export const testAgentHandler = async (event: unknown) => {
               if (functionName === 'list_repository_files') {
                 const rawContent = await listRepositoryFiles.callback({ basePath: extractPath });
                 const lines = rawContent.split('\n');
-                const filtered = lines.filter(f =>
-                  (f.includes('/src/') || f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.json')) &&
-                  !f.includes('node_modules') &&
-                  !f.includes('.git')
+                const filtered = lines.filter(f => 
+                  (f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.php') || f.endsWith('.py') || f.endsWith('.java') || f.endsWith('.go') || f.endsWith('.rb') || f.endsWith('.c') || f.endsWith('.cpp') || f.endsWith('.cs') || f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.md') || f.endsWith('.json') || f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.sql')) && 
+                  !f.includes('node_modules') && 
+                  !f.includes('.git') &&
+                  !f.includes('/vendor/') &&
+                  !f.includes('/dist/')
                 );
                 toolResponse = filtered.slice(0, 1000).join('\n');
               } else if (functionName === 'read_file_content') {

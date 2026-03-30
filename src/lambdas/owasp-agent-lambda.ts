@@ -96,9 +96,11 @@ export const owaspAgentHandler = async (event: unknown) => {
                 // Filtriamo i file per inviare solo quelli rilevanti (src, dist, config) e non superare i limiti di Bedrock
                 const lines = rawContent.split('\n');
                 const filtered = lines.filter(f => 
-                  (f.includes('/src/') || f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.json')) && 
+                  (f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.php') || f.endsWith('.py') || f.endsWith('.java') || f.endsWith('.go') || f.endsWith('.rb') || f.endsWith('.c') || f.endsWith('.cpp') || f.endsWith('.cs') || f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.md') || f.endsWith('.json') || f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.sql')) && 
                   !f.includes('node_modules') && 
-                  !f.includes('.git')
+                  !f.includes('.git') &&
+                  !f.includes('/vendor/') &&
+                  !f.includes('/dist/')
                 );
                 toolResponse = filtered.slice(0, 1000).join('\n'); // Max 1000 file
               } else if (functionName === 'read_file_content') {

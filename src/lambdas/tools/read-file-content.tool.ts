@@ -8,7 +8,10 @@ const ReadFileContentInput = z.object({
 const callback = async ({ filePath }: z.infer<typeof ReadFileContentInput>): Promise<string> => {
   try {
     const content = await readFile(filePath, 'utf-8');
-    return `----- ${filePath} -----\n${content || ''}`;
+    if (!content) return `----- ${filePath} -----\n(Empty file)`;
+    const lines = content.split('\n');
+    const numberedContent = lines.map((line, index) => `${index + 1}: ${line}`).join('\n');
+    return `----- ${filePath} -----\n${numberedContent}`;
   } catch (error: any) {
     return `Errore durante la lettura del file ${filePath}: ${error.message}`;
   }

@@ -1,141 +1,189 @@
 import { z } from 'zod';
-import { createUnzipRepoTool } from './tools/decompressione-zip.tool';
-import { createReadFileContentTool } from './tools/read-file-content.tool';
-import { createFindDocumentationFilesTool } from './tools/find-docs-files.tool';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { BedrockAgentRuntimeClient, InvokeAgentCommand } from '@aws-sdk/client-bedrock-agent-runtime';
+import { randomUUID } from 'crypto';
+import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
+import { listRepositoryFiles } from './tools/find-all-files.tool';
+import { readFileContent } from './tools/read-file-content.tool';
 
-// Manteniamo Zod solo per validare l'input in ingresso
+const s3Client = new S3Client({});
+const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
+
 const DocAgentEventSchema = z.object({
   s3Bucket: z.string(),
   s3Key: z.string(),
-  orchestratorRaw: z.string().optional(),
+  s3Prefix: z.string(),
 });
 
-// Nota: Il tipo di ritorno ora è Promise<string>, non più l'oggetto Zod
-export const docAgentHandler = async (event: unknown): Promise<string> => {
-  const { Agent } = await import('@strands-agents/sdk');
-  const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
+const AGENT_ID = process.env.DOCS_AGENT_ID || 'DB16ZAYK3A';
+const AGENT_ALIAS_ID = process.env.DOCS_AGENT_ALIAS_ID || 'TSTALIASID';
 
-  // Creiamo i tool tramite factory async
-  const [unzipRepo, findDocumentationFiles, readFileContent] =
-    await Promise.all([
-      createUnzipRepoTool(),
-      createFindDocumentationFilesTool(),
-      createReadFileContentTool(),
-    ]);
-
-  const bedrockModel = new BedrockModel({
-    modelId: 'qwen.qwen3-235b-a22b-2507-v1:0',
-    region: 'eu-central-1',
-    additionalRequestFields: {
-      thinking: { type: 'disabled' },
-      temperature: 0,
-    },
-  });
-
-  // Monkey-patch corretto: preserva il tipo async generator
-  const originalStream = bedrockModel.stream.bind(bedrockModel);
-  (bedrockModel as any).stream = async function* (params: any) {
-    if (params?.messages) {
-      params.messages = params.messages.map((msg: any) => ({
-        ...msg,
-        content: Array.isArray(msg.content)
-          ? msg.content.filter(
-              (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
-            )
-          : msg.content,
-      }));
-    }
-    yield* originalStream(params);
-  };
-
-  const {
-    s3Bucket: bucket,
-    s3Key: key,
-    orchestratorRaw,
-  } = DocAgentEventSchema.parse(event);
-
-  // === NUOVO PROMPT IN MARKDOWN STRUTTURATO ===
-  const systemInstruction = `/no_think
-    You are an expert technical writer and documentation auditor. 
-    You must follow this exact sequence of steps to explore the repository:
-    1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.
-    2. Second, use 'find_documentation_files' passing the local base path returned from step 1 to locate READMEs, ADRs, and guides.
-    3. Third, use 'read_file_content' to read the main documentation files you found, in order to evaluate setup instructions, API docs, and contribution guidelines.
-    4. Finally, evaluate the overall documentation completeness and quality.
-    
-    CRITICAL OUTPUT INSTRUCTIONS:
-    - NO PREAMBLE. NO INTRO. NO OUTRO.
-    - DO NOT USE <thinking> TAGS.
-    - START your response IMMEDIATELY with the characters "## Riepilogo Documentazione".
-    - If you use <thinking> tags, the system will fail. Output ONLY Markdown.
-
-    ## Riepilogo Documentazione
-    - **Punteggio Completezza:** [Assegna un voto da 0 a 10]
-    - **Sintesi Generale:** [Un breve paragrafo sulla qualità generale della documentazione]
-    - **Sezioni Mancanti:** [Lista separata da virgole delle sezioni assenti, es. Changelog, API Docs, Contribution Guidelines]
-    - **Raccomandazioni:** [Lista separata da virgole dei suggerimenti per migliorare]
-
-    ## Dettagli per File
-    [Ripeti il seguente blocco per OGNI file analizzato che necessita di migliorie. Se non ci sono file o la repo è vuota, scrivi "Nessun file di documentazione trovato."]
-
-    ### File: [Inserisci il percorso completo del file, es. /README.md]
-    - **Linee:** [Linea di inizio] - [Linea di fine] (Se applicabile, altrimenti 0 - 0)
-    - **Commento Generale:** [Spiega brevemente cosa manca o cosa è scritto male]
-    - **Codice Vulnerabile:**
-    \`\`\`text
-    [Inserisci qui l'eventuale pezzo di testo mancante o confuso, o lascia vuoto]
-    \`\`\`
-    - **Correzione Proposta:**
-    \`\`\`text
-    [Inserisci qui la proposta di testo o l'integrazione da fare]
-    \`\`\``;
-
-  const docAgent = new Agent({
-    name: 'Documentation_Auditor',
-    model: bedrockModel,
-    systemPrompt: systemInstruction,
-    tools: [unzipRepo, findDocumentationFiles, readFileContent],
-  });
-
-  const userPrompt = `Analyze documentation for the zipped repo in bucket '${bucket}' with key '${key}'. Context: ${orchestratorRaw ?? 'none'}`;
-
+export const docAgentHandler = async (event: unknown) => {
+  console.log('DOCS: START');
   try {
-    const finalResponse = await docAgent.invoke(userPrompt);
-    console.log(
-      'Agent Response Object:',
-      JSON.stringify(finalResponse, null, 2),
-    );
+    const { s3Bucket: bucket, s3Key: key, s3Prefix } = DocAgentEventSchema.parse(event);
 
-    // Estrazione sicura del testo
-    const firstBlock = finalResponse?.lastMessage?.content[0] as any;
+    console.log('DOCS: downloading and extracting repo...');
+    const extractPath = await unzipRepoToTemp(bucket, key);
+    console.log(`DOCS: repo extracted to ${extractPath}`);
 
-    if (!firstBlock || typeof firstBlock.text !== 'string') {
-      throw new Error(
-        'Il formato della risposta non contiene il testo atteso.',
-      );
+    const sessionId = randomUUID();
+    const initialPrompt = `Please analyze the documentation of the codebase extracted in this local directory: ${extractPath}\nUse your available tools to list all files, read the key source files (controllers, services, modules, README), and produce your documentation report.`;
+
+    let command = new InvokeAgentCommand({
+      agentId: AGENT_ID,
+      agentAliasId: AGENT_ALIAS_ID,
+      sessionId,
+      inputText: initialPrompt,
+    });
+
+    let finalMarkdownReport = '';
+
+    while (true) {
+      console.log('DOCS: Invoking AWS Bedrock Agent...');
+      const response = await bedrockClient.send(command);
+
+      if (!response.completion) {
+        console.error('DOCS: response.completion is undefined.');
+        break;
+      }
+
+      let returnControlInvocationResults: any[] = [];
+      let returnControlInvocationId: string | undefined;
+      let streamedText = '';
+
+      for await (const chunk of response.completion) {
+        if (chunk.chunk) {
+          streamedText += new TextDecoder().decode(chunk.chunk.bytes);
+        } else if (chunk.returnControl) {
+          console.log('DOCS: Intercepted Return of Control from AWS!');
+          returnControlInvocationId = chunk.returnControl.invocationId;
+          const invocationInputs = chunk.returnControl.invocationInputs || [];
+
+          for (const invocation of invocationInputs) {
+            let actionGroup = '';
+            let functionName = '';
+            let parameters: any[] = [];
+            let isApi = false;
+            let apiPath = '';
+            let httpMethod = '';
+
+            if (invocation.functionInvocationInput) {
+              actionGroup = invocation.functionInvocationInput.actionGroup || '';
+              functionName = invocation.functionInvocationInput.function || '';
+              parameters = invocation.functionInvocationInput.parameters || [];
+            } else if (invocation.apiInvocationInput) {
+              isApi = true;
+              actionGroup = invocation.apiInvocationInput.actionGroup || '';
+              apiPath = invocation.apiInvocationInput.apiPath || '';
+              httpMethod = invocation.apiInvocationInput.httpMethod || 'POST';
+              functionName = apiPath.replace(/^\//, '');
+              const apiParams = invocation.apiInvocationInput.parameters || [];
+              const bodyParams = invocation.apiInvocationInput.requestBody?.content?.['application/json']?.properties || [];
+              parameters = [...apiParams, ...bodyParams];
+            } else {
+              continue;
+            }
+
+            console.log(`DOCS: Executing local tool -> ${functionName} with params:`, JSON.stringify(parameters));
+
+            let toolResponse = '';
+            try {
+              if (functionName === 'list_repository_files') {
+                const rawContent = await listRepositoryFiles.callback({ basePath: extractPath });
+                const lines = rawContent.split('\n');
+                const filtered = lines.filter(f =>
+                  (f.includes('/src/') || f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.json') || f.endsWith('.md')) &&
+                  !f.includes('node_modules') &&
+                  !f.includes('.git')
+                );
+                toolResponse = filtered.slice(0, 1000).join('\n');
+              } else if (functionName === 'read_file_content') {
+                let filePath = parameters?.find((p: any) => p.name === 'filePath')?.value || '';
+                if (!filePath || filePath === '') {
+                  toolResponse = 'Error: Missing filePath parameter.';
+                } else {
+                  if (!filePath.startsWith('/tmp/')) {
+                    const path = require('path');
+                    filePath = path.join(extractPath, filePath.replace(/^[/\\]+/, ''));
+                    console.log(`DOCS: Coerced relative filePath to absolute: ${filePath}`);
+                  }
+                  const content = await readFileContent.callback({ filePath });
+                  toolResponse = content.substring(0, 24000);
+                }
+              } else {
+                toolResponse = `Error: Unsupported function ${functionName}`;
+              }
+            } catch (err: any) {
+              console.error(`DOCS Tool Error (${functionName}):`, err.message);
+              toolResponse = `Error executing tool: ${err.message}`;
+            }
+
+            console.log(`DOCS: Tool execution finished. Response length: ${toolResponse.length}`);
+
+            if (isApi) {
+              returnControlInvocationResults.push({
+                apiResult: {
+                  actionGroup,
+                  apiPath,
+                  httpMethod,
+                  httpStatusCode: 200,
+                  responseBody: {
+                    'application/json': {
+                      body: JSON.stringify({ result: toolResponse })
+                    }
+                  }
+                }
+              });
+            } else {
+              returnControlInvocationResults.push({
+                functionResult: {
+                  actionGroup,
+                  function: functionName,
+                  responseBody: {
+                    TEXT: { body: toolResponse }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (returnControlInvocationResults.length > 0 && returnControlInvocationId) {
+        command = new InvokeAgentCommand({
+          agentId: AGENT_ID,
+          agentAliasId: AGENT_ALIAS_ID,
+          sessionId,
+          sessionState: {
+            invocationId: returnControlInvocationId,
+            returnControlInvocationResults
+          }
+        });
+      } else {
+        finalMarkdownReport = streamedText;
+        break;
+      }
     }
 
-    // Sostituisci la tua logica di pulizia con questa
-    const responseText = firstBlock.text;
+    console.log('DOCS Agent invocation complete.');
 
-    // Rimuove TUTTO ciò che sta dentro <thinking> compresi i tag stessi
-    // La 's' flag permette al punto (.) di includere anche i newline
-    let cleanMarkdown = responseText.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
-
-    // Se il modello è così testardo da iniziare comunque con testo sporco prima del MD
-    // Forziamo l'inizio dal primo header Markdown
+    let cleanMarkdown = finalMarkdownReport.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
     const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) {
-      cleanMarkdown = cleanMarkdown.substring(startIndex);
-    }
+    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    return cleanMarkdown;
+    const reportKey = `${s3Prefix}/docs-report.md`;
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: reportKey,
+      Body: cleanMarkdown,
+      ContentType: 'text/markdown',
+    }));
+
+    return { agent: 'docs', status: 'success', reportKey };
+
   } catch (err: any) {
-    console.error(
-      'Errore completo:',
-      JSON.stringify(err, Object.getOwnPropertyNames(err), 2),
-    );
-    throw err;
+    console.error('DOCS CRASH:', err?.message, err?.stack);
+    return { agent: 'docs', status: 'error', error: err?.message ?? 'crash silenzioso' };
   }
 };

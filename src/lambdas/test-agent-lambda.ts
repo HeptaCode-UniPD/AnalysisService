@@ -1,139 +1,189 @@
 import { z } from 'zod';
-import { createUnzipRepoTool } from './tools/decompressione-zip.tool';
-import { createReadFileContentTool } from './tools/read-file-content.tool';
-import { createFindTestFilesTool } from './tools/find-test-files.tool';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { BedrockAgentRuntimeClient, InvokeAgentCommand } from '@aws-sdk/client-bedrock-agent-runtime';
+import { randomUUID } from 'crypto';
+import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
+import { listRepositoryFiles } from './tools/find-all-files.tool';
+import { readFileContent } from './tools/read-file-content.tool';
 
-// Zod rimane solo per validare l'evento di ingresso
+const s3Client = new S3Client({});
+const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
+
 const TestAgentEventSchema = z.object({
   s3Bucket: z.string(),
   s3Key: z.string(),
-  orchestratorRaw: z.string().optional(),
+  s3Prefix: z.string(),
 });
 
-// Nota: Il tipo di ritorno ora è Promise<string>, niente più oggetti o Zod!
-export const testAgentHandler = async (event: unknown): Promise<string> => {
-  const { Agent } = await import('@strands-agents/sdk');
-  const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
+const AGENT_ID = process.env.TEST_AGENT_ID || 'YXOPMZZZBU';
+const AGENT_ALIAS_ID = process.env.TEST_AGENT_ALIAS_ID || 'TSTALIASID';
 
-  // Creiamo i tool tramite factory async
-  const [unzipRepo, findTestFiles, readFileContent] = await Promise.all([
-    createUnzipRepoTool(),
-    createFindTestFilesTool(),
-    createReadFileContentTool(),
-  ]);
-
-  const bedrockModel = new BedrockModel({
-    modelId: 'qwen.qwen3-235b-a22b-2507-v1:0',
-    region: 'eu-central-1',
-    additionalRequestFields: {
-      thinking: { type: 'disabled' },
-      temperature: 0,
-    },
-  });
-
-  // Monkey-patch corretto: preserva il tipo async generator
-  const originalStream = bedrockModel.stream.bind(bedrockModel);
-  (bedrockModel as any).stream = async function* (params: any) {
-    if (params?.messages) {
-      params.messages = params.messages.map((msg: any) => ({
-        ...msg,
-        content: Array.isArray(msg.content)
-          ? msg.content.filter(
-              (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
-            )
-          : msg.content,
-      }));
-    }
-    yield* originalStream(params);
-  };
-
-  const {
-    s3Bucket: bucket,
-    s3Key: key,
-    orchestratorRaw,
-  } = TestAgentEventSchema.parse(event);
-
-  // === NUOVO PROMPT IN MARKDOWN STRUTTURATO ===
-  const systemInstruction = `/no_think
-    You are an expert QA engineer and test coverage analyst.
-    You must follow this exact sequence of steps to explore the repository:
-    1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.
-    2. Second, use 'find_test_files' passing the local base path returned from step 1 to locate unit/e2e tests and CI pipelines.
-    3. Third, use 'read_file_content' to read a representative sample of the local test files to evaluate assertion quality and coverage estimation.
-    4. Finally, evaluate the CI/CD configuration and overall test coverage.
-    
-    CRITICAL OUTPUT INSTRUCTIONS:
-    - NO PREAMBLE. NO INTRO. NO OUTRO.
-    - DO NOT USE <thinking> TAGS.
-    - START your response IMMEDIATELY with the characters "## Riepilogo Test e QA".
-    - If you use <thinking> tags, the system will fail. Output ONLY Markdown.
-
-    ## Riepilogo Test e QA
-    - **Copertura Generale:** [Breve paragrafo: ci sono test unitari? e2e? pipeline CI/CD? Se non c'è nulla, specificalo chiaramente]
-    - **Punteggio Completezza:** [Assegna un voto da 0 a 10 in base alla presenza e qualità dei test]
-    - **Raccomandazioni:** [Lista separata da virgole dei suggerimenti per migliorare la copertura, es. "Aggiungere test unitari per i controller", "Configurare GitHub Actions"]
-
-    ## Dettagli per File
-    [Ripeti il seguente blocco per OGNI file analizzato che manca di test, ha asserzioni deboli o richiede un refactoring dei test. Se il repository non ha alcun test, indica 1 o 2 file principali del codice sorgente (es. /src/main.js) suggerendo come iniziare a testarli.]
-
-    ### File: [Inserisci il percorso completo del file, es. /src/utils.js o /tests/utils.test.js]
-    - **Linee:** [Linea di inizio] - [Linea di fine] (Se applicabile, altrimenti 0 - 0)
-    - **Commento Generale:** [Spiega perché manca copertura qui o cosa c'è di sbagliato]
-    - **Codice Vulnerabile:**
-    \`\`\`text
-    [Inserisci qui la funzione non testata o il test esistente scritto male]
-    \`\`\`
-    - **Correzione Proposta:**
-    \`\`\`text
-    [Inserisci qui l'esempio di test unitario o la configurazione CI/CD proposta]
-    \`\`\``;
-
-  const testAgent = new Agent({
-    name: 'Test_Auditor',
-    model: bedrockModel,
-    systemPrompt: systemInstruction,
-    tools: [unzipRepo, findTestFiles, readFileContent],
-  });
-
-  const userPrompt = `Analyze test coverage for the zipped repo in bucket '${bucket}' with key '${key}'. Context: ${orchestratorRaw ?? 'none'}`;
-
+export const testAgentHandler = async (event: unknown) => {
+  console.log('TEST: START');
   try {
-    const finalResponse = await testAgent.invoke(userPrompt);
-    console.log(
-      'Agent Response Object:',
-      JSON.stringify(finalResponse, null, 2),
-    );
+    const { s3Bucket: bucket, s3Key: key, s3Prefix } = TestAgentEventSchema.parse(event);
 
-    // Estrazione sicura del testo
-    const firstBlock = finalResponse?.lastMessage?.content[0] as any;
+    console.log('TEST: downloading and extracting repo...');
+    const extractPath = await unzipRepoToTemp(bucket, key);
+    console.log(`TEST: repo extracted to ${extractPath}`);
 
-    if (!firstBlock || typeof firstBlock.text !== 'string') {
-      throw new Error(
-        'Il formato della risposta non contiene il testo atteso.',
-      );
+    const sessionId = randomUUID();
+    const initialPrompt = `Please analyze the test coverage of the codebase extracted in this local directory: ${extractPath}\nUse your available tools to list all files, identify test files (*.spec.ts, *.test.ts), read them, and cross-reference with the source files to produce your report.`;
+
+    let command = new InvokeAgentCommand({
+      agentId: AGENT_ID,
+      agentAliasId: AGENT_ALIAS_ID,
+      sessionId,
+      inputText: initialPrompt,
+    });
+
+    let finalMarkdownReport = '';
+
+    while (true) {
+      console.log('TEST: Invoking AWS Bedrock Agent...');
+      const response = await bedrockClient.send(command);
+
+      if (!response.completion) {
+        console.error('TEST: response.completion is undefined.');
+        break;
+      }
+
+      let returnControlInvocationResults: any[] = [];
+      let returnControlInvocationId: string | undefined;
+      let streamedText = '';
+
+      for await (const chunk of response.completion) {
+        if (chunk.chunk) {
+          streamedText += new TextDecoder().decode(chunk.chunk.bytes);
+        } else if (chunk.returnControl) {
+          console.log('TEST: Intercepted Return of Control from AWS!');
+          returnControlInvocationId = chunk.returnControl.invocationId;
+          const invocationInputs = chunk.returnControl.invocationInputs || [];
+
+          for (const invocation of invocationInputs) {
+            let actionGroup = '';
+            let functionName = '';
+            let parameters: any[] = [];
+            let isApi = false;
+            let apiPath = '';
+            let httpMethod = '';
+
+            if (invocation.functionInvocationInput) {
+              actionGroup = invocation.functionInvocationInput.actionGroup || '';
+              functionName = invocation.functionInvocationInput.function || '';
+              parameters = invocation.functionInvocationInput.parameters || [];
+            } else if (invocation.apiInvocationInput) {
+              isApi = true;
+              actionGroup = invocation.apiInvocationInput.actionGroup || '';
+              apiPath = invocation.apiInvocationInput.apiPath || '';
+              httpMethod = invocation.apiInvocationInput.httpMethod || 'POST';
+              functionName = apiPath.replace(/^\//, '');
+              const apiParams = invocation.apiInvocationInput.parameters || [];
+              const bodyParams = invocation.apiInvocationInput.requestBody?.content?.['application/json']?.properties || [];
+              parameters = [...apiParams, ...bodyParams];
+            } else {
+              continue;
+            }
+
+            console.log(`TEST: Executing local tool -> ${functionName} with params:`, JSON.stringify(parameters));
+
+            let toolResponse = '';
+            try {
+              if (functionName === 'list_repository_files') {
+                const rawContent = await listRepositoryFiles.callback({ basePath: extractPath });
+                const lines = rawContent.split('\n');
+                const filtered = lines.filter(f =>
+                  (f.includes('/src/') || f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.json')) &&
+                  !f.includes('node_modules') &&
+                  !f.includes('.git')
+                );
+                toolResponse = filtered.slice(0, 1000).join('\n');
+              } else if (functionName === 'read_file_content') {
+                let filePath = parameters?.find((p: any) => p.name === 'filePath')?.value || '';
+                if (!filePath || filePath === '') {
+                  toolResponse = 'Error: Missing filePath parameter.';
+                } else {
+                  if (!filePath.startsWith('/tmp/')) {
+                    const path = require('path');
+                    filePath = path.join(extractPath, filePath.replace(/^[/\\]+/, ''));
+                    console.log(`TEST: Coerced relative filePath to absolute: ${filePath}`);
+                  }
+                  const content = await readFileContent.callback({ filePath });
+                  toolResponse = content.substring(0, 24000);
+                }
+              } else {
+                toolResponse = `Error: Unsupported function ${functionName}`;
+              }
+            } catch (err: any) {
+              console.error(`TEST Tool Error (${functionName}):`, err.message);
+              toolResponse = `Error executing tool: ${err.message}`;
+            }
+
+            console.log(`TEST: Tool execution finished. Response length: ${toolResponse.length}`);
+
+            if (isApi) {
+              returnControlInvocationResults.push({
+                apiResult: {
+                  actionGroup,
+                  apiPath,
+                  httpMethod,
+                  httpStatusCode: 200,
+                  responseBody: {
+                    'application/json': {
+                      body: JSON.stringify({ result: toolResponse })
+                    }
+                  }
+                }
+              });
+            } else {
+              returnControlInvocationResults.push({
+                functionResult: {
+                  actionGroup,
+                  function: functionName,
+                  responseBody: {
+                    TEXT: { body: toolResponse }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (returnControlInvocationResults.length > 0 && returnControlInvocationId) {
+        command = new InvokeAgentCommand({
+          agentId: AGENT_ID,
+          agentAliasId: AGENT_ALIAS_ID,
+          sessionId,
+          sessionState: {
+            invocationId: returnControlInvocationId,
+            returnControlInvocationResults
+          }
+        });
+      } else {
+        finalMarkdownReport = streamedText;
+        break;
+      }
     }
 
-    // Sostituisci la tua logica di pulizia con questa
-    const responseText = firstBlock.text;
+    console.log('TEST Agent invocation complete.');
 
-    // Rimuove TUTTO ciò che sta dentro <thinking> compresi i tag stessi
-    // La 's' flag permette al punto (.) di includere anche i newline
-    let cleanMarkdown = responseText.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
-
-    // Se il modello è così testardo da iniziare comunque con testo sporco prima del MD
-    // Forziamo l'inizio dal primo header Markdown
+    let cleanMarkdown = finalMarkdownReport.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
     const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) {
-      cleanMarkdown = cleanMarkdown.substring(startIndex);
-    }
+    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    return cleanMarkdown;
+    const reportKey = `${s3Prefix}/test-report.md`;
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: reportKey,
+      Body: cleanMarkdown,
+      ContentType: 'text/markdown',
+    }));
+
+    return { agent: 'test', status: 'success', reportKey };
+
   } catch (err: any) {
-    console.error(
-      'Errore completo:',
-      JSON.stringify(err, Object.getOwnPropertyNames(err), 2),
-    );
-    throw err;
+    console.error('TEST CRASH:', err?.message, err?.stack);
+    return { agent: 'test', status: 'error', error: err?.message ?? 'crash silenzioso' };
   }
 };

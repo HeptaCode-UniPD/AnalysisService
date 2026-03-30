@@ -6,11 +6,12 @@ provider:
   region: eu-central-1
   memorySize: 512
   iamRoleStatements:
-    # Permesso per scrivere e leggere su S3 (per la Lambda pullRepo)
+    # Permesso per scrivere, leggere e CANCELLARE su S3
     - Effect: Allow
       Action:
         - s3:PutObject
         - s3:GetObject
+        - s3:DeleteObject
       Resource:
         - !Join ['', [!GetAtt RepositoryBucket.Arn, '/*']]
     # Permesso per il Wrapper NestJS di avviare la Step Function
@@ -19,7 +20,7 @@ provider:
         - states:StartExecution
       Resource:
         - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
-    # Permesso all'Orchestratore di chiamare gli Agenti AI
+    # Permesso all'Orchestratore di chiamare gli Agenti AI (se servisse)
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
@@ -29,6 +30,7 @@ provider:
       Action:
         - bedrock:InvokeModel
         - bedrock:InvokeModelWithResponseStream
+        - bedrock:InvokeAgent
       Resource: '*'
 
 package:
@@ -51,7 +53,6 @@ functions:
   wrapperAdapter:
     handler: dist/wrapper/handler.startAnalysis
     environment:
-      # Passiamo l'ARN dinamico della Step Function al codice NestJS
       STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
     events:
       - http:

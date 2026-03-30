@@ -1,5 +1,5 @@
 {
-  "Comment": "Pipeline MS2: S3 Clone -> Orchestrator -> Webhook",
+  "Comment": "Pipeline MS2: S3 Clone -> Orchestrator Plan -> Parallel Agents -> Orchestrator Aggregate -> Webhook",
   "StartAt": "Initialize",
   "QueryLanguage": "JSONata",
   "States": {
@@ -31,18 +31,114 @@
         "s3Key": "{% $states.result.Payload.s3Key %}",
         "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
       },
-      "Next": "Run Orchestrator"
+      "Next": "Orchestrator Planning"
     },
-    "Run Orchestrator": {
+    "Orchestrator Planning": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Arguments": {
         "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
         "Payload": {
+          "action": "PLAN",
+          "payload": {
+            "repoMetadata": "{% $repoMetadata %}"
+          }
+        }
+      },
+      "Assign": {
+        "orchestratorPlan": "{% $states.result.Payload %}",
+        "agentPayload": {
           "s3Bucket": "{% $s3Bucket %}",
           "s3Key": "{% $s3Key %}",
-          "isRelease": "{% $count($repoMetadata.tags) > 0 or $repoMetadata.hasChangelog %}",
-          "orchestratorRaw": "{% 'Metadati Repo: ' & $string($repoMetadata) %}"
+          "s3Prefix": "{% $s3Prefix %}",
+          "jobId": "{% $jobId %}"
+        }
+      },
+      "Next": "Parallel AI Analysis"
+    },
+    "Parallel AI Analysis": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Run OWASP Agent",
+          "States": {
+            "Run OWASP Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Arguments": {
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-owaspAgent",
+                "Payload": "{% $agentPayload %}"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Run Test Agent",
+          "States": {
+            "Run Test Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Arguments": {
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-testAgent",
+                "Payload": "{% $agentPayload %}"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Check Run Docs",
+          "States": {
+            "Check Run Docs": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Condition": "{% $orchestratorPlan.runDocs %}",
+                  "Next": "Run Docs Agent"
+                }
+              ],
+              "Default": "Skip Docs Agent"
+            },
+            "Skip Docs Agent": {
+              "Type": "Pass",
+              "Output": {
+                "Payload": {
+                  "agent": "docs",
+                  "status": "skipped"
+                }
+              },
+              "End": true
+            },
+            "Run Docs Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Arguments": {
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-docsAgent",
+                "Payload": "{% $agentPayload %}"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Assign": {
+        "parallelResults": "{% $states.result %}"
+      },
+      "Next": "Orchestrator Aggregation"
+    },
+    "Orchestrator Aggregation": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
+        "Payload": {
+          "action": "AGGREGATE",
+          "payload": {
+            "jobId": "{% $jobId %}",
+            "s3Bucket": "{% $s3Bucket %}",
+            "reports": "{% $parallelResults[].Payload %}"
+          }
         }
       },
       "Assign": {

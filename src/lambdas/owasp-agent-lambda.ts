@@ -39,7 +39,7 @@ export const owaspAgentHandler = async (event: unknown): Promise<string> => {
         content: Array.isArray(msg.content)
           ? msg.content.filter(
               (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
+                !(block.type === 'text' && (block.text ?? '').trim() === ''),
             )
           : msg.content,
       }));
@@ -118,7 +118,9 @@ export const owaspAgentHandler = async (event: unknown): Promise<string> => {
 
     // Rimuove TUTTO ciò che sta dentro <thinking> compresi i tag stessi
     // La 's' flag permette al punto (.) di includere anche i newline
-    let cleanMarkdown = responseText.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
+    let cleanMarkdown = responseText
+      .replace(/<thinking>.*?<\/thinking>/gs, '')
+      .trim();
 
     // Se il modello è così testardo da iniziare comunque con testo sporco prima del MD
     // Forziamo l'inizio dal primo header Markdown

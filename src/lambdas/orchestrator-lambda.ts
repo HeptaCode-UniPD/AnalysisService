@@ -62,7 +62,9 @@ const FileAnalysisSchema = z.object({
 const AnalysisDetailSchema = z.object({
   agentName: z
     .string()
-    .describe("Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA, Documentation)"),
+    .describe(
+      "Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA, Documentation)",
+    ),
   files: z
     .array(FileAnalysisSchema)
     .describe('Lista dei file analizzati da questo agente'),
@@ -73,7 +75,10 @@ const OrchestratorOutputSchema = z.object({
   status: z.enum(['successo', 'fallito']),
   totalIssuesFound: z.number().int(),
   analysisDetails: z.array(AnalysisDetailSchema).optional(),
-  rawMarkdownReport: z.string().optional().describe("Il report testuale completo in formato Markdown")
+  rawMarkdownReport: z
+    .string()
+    .optional()
+    .describe('Il report testuale completo in formato Markdown'),
 });
 
 export type OrchestratorOutput = z.infer<typeof OrchestratorOutputSchema>;
@@ -101,7 +106,7 @@ export const orchestratorHandler = async (
         content: Array.isArray(msg.content)
           ? msg.content.filter(
               (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
+                !(block.type === 'text' && (block.text ?? '').trim() === ''),
             )
           : msg.content,
       }));
@@ -216,18 +221,18 @@ export const orchestratorHandler = async (
     finalResponse = await orchestratorAgent.invoke(userPrompt);
   } catch (err: any) {
     console.error('=== ERRORE PROFONDO ===');
-    
+
     // 1. Logga l'errore intero su CloudWatch (non perdoniamo nulla)
     console.error(JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
 
     // 2. Estrai il messaggio in modo sicuro
-    let errorDetails = "Errore sconosciuto";
+    let errorDetails = 'Errore sconosciuto';
     if (err instanceof Error) {
-        errorDetails = err.message;
+      errorDetails = err.message;
     } else if (typeof err === 'object' && err !== null) {
-        errorDetails = JSON.stringify(err);
+      errorDetails = JSON.stringify(err);
     } else {
-        errorDetails = String(err);
+      errorDetails = String(err);
     }
 
     throw new Error(`Orchestratore fallito: ${errorDetails}`);
@@ -258,7 +263,9 @@ export const orchestratorHandler = async (
   const lastBracket = rawText.lastIndexOf('}');
 
   if (firstBracket === -1 || lastBracket === -1) {
-    throw new Error(`Il modello non ha generato un JSON. Testo ricevuto: ${rawText.substring(0, 100)}...`);
+    throw new Error(
+      `Il modello non ha generato un JSON. Testo ricevuto: ${rawText.substring(0, 100)}...`,
+    );
   }
 
   const jsonString = rawText.substring(firstBracket, lastBracket + 1);
@@ -268,7 +275,7 @@ export const orchestratorHandler = async (
     // Validazione finale con Zod
     return OrchestratorOutputSchema.parse(parsedData);
   } catch (e) {
-    console.error("Errore nel parsing del JSON estratto:", jsonString);
+    console.error('Errore nel parsing del JSON estratto:', jsonString);
     throw new Error(`JSON malformato: ${e.message}`);
   }
 };

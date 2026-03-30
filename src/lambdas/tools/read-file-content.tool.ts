@@ -1,12 +1,15 @@
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { readFile } from 'fs/promises';
 
 const ReadFileContentInput = z.object({
-  filePath: z.string().describe('Il percorso assoluto del file locale da leggere'),
+  filePath: z
+    .string()
+    .describe('Il percorso assoluto del file locale da leggere'),
 });
 
-const callback = async ({ filePath }: z.infer<typeof ReadFileContentInput>): Promise<string> => {
+const callback = async ({
+  filePath,
+}: z.infer<typeof ReadFileContentInput>): Promise<string> => {
   try {
     const content = await readFile(filePath, 'utf-8');
     return `----- ${filePath} -----\n${content || ''}`;
@@ -20,8 +23,9 @@ export const createReadFileContentTool = async () => {
   const { tool } = await import('@strands-agents/sdk');
   return tool({
     name: 'read_file_content',
-    description: 'Legge il contenuto testuale di un file specifico dal file system locale.',
-    inputSchema: zodToJsonSchema(ReadFileContentInput as any) as any,
+    description:
+      'Legge il contenuto testuale di un file specifico dal file system locale.',
+    inputSchema: z.toJSONSchema(ReadFileContentInput as any) as any,
     callback,
   });
 };

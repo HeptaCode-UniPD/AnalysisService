@@ -60,8 +60,8 @@ functions:
 
   pullRepoToS3:
     handler: dist/lambdas/pull-repo.handler
-    timeout: 300
-    memorySize: 2048
+    timeout: 900
+    memorySize: 8192
     environment:
       S3_BUCKET_NAME: !Ref RepositoryBucket
     layers:
@@ -73,7 +73,8 @@ functions:
 
   orchestrator:
     handler: dist/lambdas/orchestrator-lambda.orchestratorHandler
-    timeout: 300 # Diamo 5 minuti di tempo perché Claude deve leggere tutto!
+    timeout: 900
+    memorySize: 4096
     environment:
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
@@ -81,15 +82,18 @@ functions:
 
   owaspAgent:
     handler: dist/lambdas/owasp-agent-lambda.owaspAgentHandler
-    timeout: 300
+    timeout: 900
+    memorySize: 4096
 
   testAgent:
     handler: dist/lambdas/test-agent-lambda.testAgentHandler
-    timeout: 300
+    timeout: 900
+    memorySize: 4096
 
   docsAgent:
     handler: dist/lambdas/docs-agent-lambda.docAgentHandler
-    timeout: 300
+    timeout: 900
+    memorySize: 4096
 
 # Definizione della Step Function
 stepFunctions:

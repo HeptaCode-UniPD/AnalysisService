@@ -1,12 +1,17 @@
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
 const FindDocumentationFilesInput = z.object({
-  basePath: z.string().describe('Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)'),
+  basePath: z
+    .string()
+    .describe(
+      'Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)',
+    ),
 });
 
-const callback = async ({ basePath }: z.infer<typeof FindDocumentationFilesInput>): Promise<string> => {
+const callback = async ({
+  basePath,
+}: z.infer<typeof FindDocumentationFilesInput>): Promise<string> => {
   try {
     const allFiles = await getFilesRecursive(basePath);
     const docFiles = allFiles.filter((filePath) => {
@@ -32,8 +37,9 @@ export const createFindDocumentationFilesTool = async () => {
   const { tool } = await import('@strands-agents/sdk');
   return tool({
     name: 'find_documentation_files',
-    description: 'Esplora la cartella locale del repository e restituisce i percorsi assoluti dei file di documentazione.',
-    inputSchema: zodToJsonSchema(FindDocumentationFilesInput as any) as any,
+    description:
+      'Esplora la cartella locale del repository e restituisce i percorsi assoluti dei file di documentazione.',
+    inputSchema: z.toJSONSchema(FindDocumentationFilesInput as any) as any,
     callback,
   });
 };

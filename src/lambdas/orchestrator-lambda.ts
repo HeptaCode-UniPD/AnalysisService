@@ -62,24 +62,18 @@ const FileAnalysisSchema = z.object({
 const AnalysisDetailSchema = z.object({
   agentName: z
     .string()
-    .describe("Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA)"),
+    .describe("Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA, Documentation)"),
   files: z
     .array(FileAnalysisSchema)
     .describe('Lista dei file analizzati da questo agente'),
 });
 
 const OrchestratorOutputSchema = z.object({
-  jobId: z.string().describe('ID univoco del job di analisi'),
-  status: z
-    .enum(['successo', 'fallito'])
-    .describe("Stato complessivo dell'analisi"),
-  totalIssuesFound: z
-    .number()
-    .int()
-    .describe('Numero totale di problemi trovati in tutti i file'),
-  analysisDetails: z
-    .array(AnalysisDetailSchema)
-    .describe("Dettagli dell'analisi divisi per agente"),
+  jobId: z.string(),
+  status: z.enum(['successo', 'fallito']),
+  totalIssuesFound: z.number().int(),
+  analysisDetails: z.array(AnalysisDetailSchema).optional(),
+  rawMarkdownReport: z.string().optional().describe("Il report testuale completo in formato Markdown")
 });
 
 export type OrchestratorOutput = z.infer<typeof OrchestratorOutputSchema>;
@@ -87,9 +81,8 @@ export type OrchestratorOutput = z.infer<typeof OrchestratorOutputSchema>;
 // Handler dell'Orchestratore
 export const orchestratorHandler = async (
   event: unknown,
-  context: any,
 ): Promise<OrchestratorOutput> => {
-  // === IMPORT DINAMICI (Fix per l'errore ES Module in CommonJS) ===
+  // === IMPORT DINAMICI ===
   const { Agent, tool } = await import('@strands-agents/sdk');
   const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
 
@@ -99,27 +92,49 @@ export const orchestratorHandler = async (
     region: 'eu-central-1',
   });
 
+  // Monkey-patch corretto: preserva il tipo async generator
+  const originalStream = bedrockModel.stream.bind(bedrockModel);
+  (bedrockModel as any).stream = async function* (params: any) {
+    if (params?.messages) {
+      params.messages = params.messages.map((msg: any) => ({
+        ...msg,
+        content: Array.isArray(msg.content)
+          ? msg.content.filter(
+              (block: any) =>
+                !(block.type === 'text' && (block.text ?? '').trim() === '')
+            )
+          : msg.content,
+      }));
+    }
+    yield* originalStream(params);
+  };
+
   const runDocumentationAnalysis = tool({
     name: 'run_documentation_analysis',
     description:
       "Avvia l'analisi della documentazione. Usalo SOLO se determini dal contesto che il repository è una 'release'.",
     inputSchema: z.toJSONSchema(SubAgentToolInput as any) as any,
     callback: async ({ bucket, key, context }: ToolInput): Promise<string> => {
-      console.log(`[TOOL] Invocazione LAMBDA_DOCS_NAME per bucket: ${bucket}, key: ${key}`);
-      
+      console.log(
+        `[TOOL] Invocazione LAMBDA_DOCS_NAME per bucket: ${bucket}, key: ${key}`,
+      );
+
       try {
         const result = await invokeAgentLambda(process.env.LAMBDA_DOCS_NAME!, {
           s3Bucket: bucket,
           s3Key: key,
           orchestratorRaw: context,
         });
-        
-        console.log(`[TOOL] Risultato da LAMBDA_DOCS_NAME (primi 100 char):`, result.substring(0, 100));
-        return result;
+
+        console.log(
+          `[TOOL] Risultato da LAMBDA_DOCS_NAME (primi 100 char):`,
+          result.substring(0, 100),
+        );
+        return result; // L'orchestratore ora riceverà una stringa Markdown
       } catch (toolError: any) {
-        console.error(`[TOOL] ❌ Errore durante l'esecuzione di LAMBDA_DOCS_NAME!`);
-        console.error(JSON.stringify(toolError, Object.getOwnPropertyNames(toolError), 2));
-        
+        console.error(
+          `[TOOL] ❌ Errore durante l'esecuzione di LAMBDA_DOCS_NAME!`,
+        );
         return `Errore interno durante l'analisi della documentazione: ${toolError.message || 'Errore sconosciuto'}`;
       }
     },
@@ -141,21 +156,36 @@ export const orchestratorHandler = async (
     invokeAgentLambda(process.env.LAMBDA_TEST_NAME!, payload),
   ]);
 
-  // B. DELEGA DELLA DECISIONE ALL'AGENTE LLM
-const systemInstruction = `You are a Lead Repository Auditor and Orchestrator.
-  You have already been provided with the pre-computed OWASP and Test & QA analysis results.
-  
+  const systemInstruction = `You are a data converter. Your EXCLUSIVE goal is to transform Markdown security reports into a SINGLE valid JSON object.
+
   RULES:
-  1. Analyze the provided Context and Status.
-  2. IF it explicitly states this is a "RELEASE", you MUST decide to use the 'run_documentation_analysis' tool to fetch documentation data.
-  3. IF it is NOT a release, do not use the tool.
-  4. Synthesize all results (OWASP, QA, and potentially Docs) into a final comprehensive executive summary.
-  
-  CRITICAL TOOL INSTRUCTION:
-  If you decide to use a tool, you MUST write a brief text explanation of why you are using it BEFORE the tool call. NEVER output an empty text block.
-  
-  Respond ONLY with valid JSON matching this exact schema, no markdown:
-  ${JSON.stringify(OrchestratorOutputSchema.shape)}`;
+  1. OUTPUT ONLY VALID JSON. No conversational text, no preambles, no "Here is the analysis".
+  2. If the input is Markdown, parse it and map it to the schema below.
+  3. DATA MAPPING:
+    - Extract 'filePath' from headers or bullet points, remove the first 2 directories.
+    - Extract 'startLine' and 'endLine' from patterns like "Linee: X-Y". If not found, use 0.
+    - Use the description of the vulnerability as 'reason'.
+    - If 'originalCode' or 'proposedCorrection' are missing in the Markdown, use an empty string "" but NEVER omit the field.
+
+  REQUIRED JSON STRUCTURE:
+  {
+    "jobId": "string",
+    "status": "successo" | "fallito",
+    "totalIssuesFound": number,
+    "analysisDetails": [
+      {
+        "agentName": "OWASP" | "QA" | "Documentation",
+        "files": [
+          {
+            "filePath": "string",
+            "findings": [
+              { "startLine": 0, "endLine": 0, "reason": "string", "originalCode": "string", "proposedCorrection": "string" }
+            ]
+          }
+        ]
+      }
+    ]
+  }`;
 
   const orchestratorAgent = new Agent({
     name: 'Main_Orchestrator',
@@ -168,67 +198,77 @@ const systemInstruction = `You are a Lead Repository Auditor and Orchestrator.
     ? 'This IS a RELEASE.'
     : 'This IS NOT a release.';
 
-  // Passiamo tutto all'agente: i risultati paralleli e il contesto su cui deve decidere
+  // Passiamo tutto all'agente: i risultati paralleli testuali (Markdown) e il contesto su cui deve decidere
   const userPrompt = `Analyze the repo in bucket '${bucket}' under prefix '${key}'. 
   Status: ${releaseStatus}
   Context: ${orchestratorRaw}
   
-  --- PRE-COMPUTED OWASP ANALYSIS ---
+  --- PRE-COMPUTED OWASP ANALYSIS (MARKDOWN) ---
   ${owaspResult}
   
-  --- PRE-COMPUTED TEST & QA ANALYSIS ---
+  --- PRE-COMPUTED TEST & QA ANALYSIS (MARKDOWN) ---
   ${testResult}`;
-
 
   console.log("Invocazione dell'Orchestratore per la decisione e sintesi...");
 
   let finalResponse: any;
   try {
     finalResponse = await orchestratorAgent.invoke(userPrompt);
-  }catch (err: any) {
-  console.error('=== ERRORE PROFONDO ===');
-  
-  // Scendi fino alla causa più profonda
-  let deepErr = err;
-  let depth = 0;
-  while (deepErr?.cause && depth < 5) {
-    deepErr = deepErr.cause;
-    depth++;
+  } catch (err: any) {
+    console.error('=== ERRORE PROFONDO ===');
+    
+    // 1. Logga l'errore intero su CloudWatch (non perdoniamo nulla)
+    console.error(JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+
+    // 2. Estrai il messaggio in modo sicuro
+    let errorDetails = "Errore sconosciuto";
+    if (err instanceof Error) {
+        errorDetails = err.message;
+    } else if (typeof err === 'object' && err !== null) {
+        errorDetails = JSON.stringify(err);
+    } else {
+        errorDetails = String(err);
+    }
+
+    throw new Error(`Orchestratore fallito: ${errorDetails}`);
   }
 
-  // Il .message è un oggetto — proviamo a leggerlo come tale
-  const rawMessage = deepErr?.message;
-  console.error('rawMessage type:', typeof rawMessage);
-  console.error('rawMessage JSON:', JSON.stringify(rawMessage, null, 2));
-  console.error('rawMessage keys:', rawMessage && typeof rawMessage === 'object' 
-    ? Object.getOwnPropertyNames(rawMessage) 
-    : 'not an object');
+  console.log(
+    'Risposta grezza dal modello:',
+    JSON.stringify(finalResponse, null, 2),
+  );
 
-  // Prova a leggere tutte le props non enumerabili dell'errore radice
-  console.error('err all props:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
-  console.error('err.cause all props:', err?.cause 
-    ? JSON.stringify(err.cause, Object.getOwnPropertyNames(err.cause), 2) 
-    : 'no cause');
+  // 1. NAVIGHIAMO L'OGGETTO CORRETTAMENTE
+  const lastMessageContent = finalResponse?.lastMessage?.content;
 
-  throw new Error(`Orchestratore fallito: ${JSON.stringify(rawMessage)}`);
-}
-
-  console.log("Risposta grezza dal modello:", JSON.stringify(finalResponse, null, 2));
-  console.log("Tipo risposta:", typeof finalResponse);
-  console.log("Chiavi risposta:", Object.keys(finalResponse ?? {}));
-  const rawText = finalResponse.text || finalResponse.content || finalResponse.output || (typeof finalResponse === 'string' ? finalResponse : '');
-
-  if (!rawText) {
-    throw new Error("Il modello non ha restituito alcun testo valido.");
+  if (
+    !Array.isArray(lastMessageContent) ||
+    lastMessageContent.length === 0 ||
+    typeof lastMessageContent[0].text !== 'string'
+  ) {
+    throw new Error(
+      "Il formato della risposta non contiene il testo atteso nell'array lastMessage.content.",
+    );
   }
 
-  const cleanJsonString = rawText
-  .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-  .replace(/```json/gi, '')
-  .replace(/```/g, '')
-  .trim();
-  const parsedData = JSON.parse(cleanJsonString);
+  const rawText = lastMessageContent[0].text;
 
-  return OrchestratorOutputSchema.parse(parsedData);
+  // Cerca la prima '{' e l'ultima '}' per estrarre solo il blocco JSON
+  const firstBracket = rawText.indexOf('{');
+  const lastBracket = rawText.lastIndexOf('}');
 
+  if (firstBracket === -1 || lastBracket === -1) {
+    throw new Error(`Il modello non ha generato un JSON. Testo ricevuto: ${rawText.substring(0, 100)}...`);
+  }
+
+  const jsonString = rawText.substring(firstBracket, lastBracket + 1);
+
+  try {
+    const parsedData = JSON.parse(jsonString);
+    // Validazione finale con Zod
+    return OrchestratorOutputSchema.parse(parsedData);
+  } catch (e) {
+    console.error("Errore nel parsing del JSON estratto:", jsonString);
+    throw new Error(`JSON malformato: ${e.message}`);
+  }
 };

@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { readFileSync, rmSync, existsSync } from 'fs';
+import { rmSync, existsSync } from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import AdmZip from 'adm-zip';
 
@@ -8,31 +8,36 @@ const s3Client = new S3Client({});
 function processRepository(
   cloneUrl: string,
   commitSha: string,
-  tmpDir: string,
-  zipPath: string,
-): { hasChangelog: boolean; tags: string[]; branches: string[] } {
+  tmpDir: string
+): { metadata: { hasChangelog: boolean; tags: string[]; branches: string[] }, zipBuffer: Buffer } {
+  // 1. Clona e fai il checkout
   execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
   execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
 
+  // 2. Estrai i metadati necessari
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();
-  const branchesOutput = execSync('git branch -r', { cwd: tmpDir })
-    .toString()
-    .trim();
+  const branchesOutput = execSync('git branch -r', { cwd: tmpDir }).toString().trim();
 
   const repoMetadata = {
-    hasChangelog:
-      existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
+    hasChangelog: existsSync(`${tmpDir}/CHANGELOG.md`) || existsSync(`${tmpDir}/CHANGELOG`),
     tags: tagsOutput ? tagsOutput.split('\n') : [],
-    branches: branchesOutput
-      ? branchesOutput.split('\n').map((b) => b.trim())
-      : [],
+    branches: branchesOutput ? branchesOutput.split('\n').map((b) => b.trim()) : [],
   };
 
+  // 3. FIX: Rimuovi la cartella .git! Evita che adm-zip fallisca a causa di symlinks e file read-only
+  const gitDir = `${tmpDir}/.git`;
+  if (existsSync(gitDir)) {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+
+  // 4. Crea lo zip
   const zip = new AdmZip();
   zip.addLocalFolder(tmpDir);
-  zip.writeZip(zipPath);
+  
+  // 5. FIX: Restituisci direttamente il buffer in memoria anziché scrivere su disco
+  const zipBuffer = zip.toBuffer();
 
-  return repoMetadata;
+  return { metadata: repoMetadata, zipBuffer };
 }
 
 export const handler = async (event: any) => {
@@ -44,34 +49,34 @@ export const handler = async (event: any) => {
   }
 
   const tmpDir = `/tmp/repo-${jobId}`;
-  // Estensione corretta in .zip
-  const zipPath = `/tmp/archive-${jobId}.zip`;
 
   try {
-    const repoMetadata = processRepository(repoUrl, commitSha, tmpDir, zipPath);
+    const { metadata, zipBuffer } = processRepository(repoUrl, commitSha, tmpDir);
 
-    const fileBuffer = readFileSync(zipPath);
-    // Cambiato s3Key per usare .zip invece di .tar.gz
     const s3Key = `${s3Prefix}/source.zip`;
 
+    // FIX: Passa il buffer direttamente a S3 e aggiungi il ContentType
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucketName,
         Key: s3Key,
-        Body: fileBuffer,
+        Body: zipBuffer,
+        ContentType: 'application/zip' 
       }),
     );
 
     return {
       s3Bucket: bucketName,
       s3Key: s3Key,
-      repoMetadata: repoMetadata,
+      repoMetadata: metadata,
     };
   } catch (error: any) {
     console.error('Errore esecuzione Lambda:', error);
-    throw new Error(`Impossibile scaricare la repository: ${error.message}`);
+    throw new Error(`Impossibile scaricare o zippare la repository: ${error.message}`);
   } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
-    rmSync(zipPath, { force: true });
+    // Pulisci solo la cartella tmpDir, non serve più eliminare lo zip dal disco
+    if (existsSync(tmpDir)) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   }
 };

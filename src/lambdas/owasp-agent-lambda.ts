@@ -9,12 +9,52 @@ const OwaspAgentEventSchema = z.object({
   orchestratorRaw: z.string().optional(),
 });
 
-// Nota: Il tipo di ritorno ora è Promise<string>, non più un oggetto Zod
+const OwaspReportSchema = z.object({
+  copertura_generale: z
+    .string()
+    .describe(
+      'Panoramica generale dello stato di sicurezza basata sul codice analizzato.',
+    ),
+  parametri_rispettati: z
+    .array(z.string())
+    .describe('Lista delle categorie OWASP rispettate dal codice.'),
+  parametri_violati: z
+    .array(z.string())
+    .describe('Lista delle categorie OWASP violate dal codice.'),
+  vulnerabilita: z
+    .array(
+      z.object({
+        file_path: z
+          .string()
+          .describe('Percorso assoluto del file vulnerabile.'),
+        commento_generale: z
+          .string()
+          .describe('Spiegazione del perché il codice è vulnerabile.'),
+        linea_inizio: z
+          .number()
+          .int()
+          .describe('Linea di inizio del problema.'),
+        linea_fine: z.number().int().describe('Linea di fine del problema.'),
+        codice_vulnerabile: z
+          .string()
+          .describe('Frammento di codice originale vulnerabile.'),
+        correzione_proposta: z
+          .string()
+          .describe('Frammento di codice sicuro proposto in sostituzione.'),
+      }),
+    )
+    .default([])
+    .describe(
+      'Lista delle vulnerabilità trovate. Vuota se il codice è sicuro.',
+    ),
+});
+
+export type OwaspReport = z.infer<typeof OwaspReportSchema>;
+
 export const owaspAgentHandler = async (event: unknown): Promise<string> => {
   const { Agent } = await import('@strands-agents/sdk');
   const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
 
-  // Creiamo i tool tramite factory async
   const [unzipRepo, listRepositoryFiles, readFileContent] = await Promise.all([
     createUnzipRepoTool(),
     createListRepositoryFilesTool(),
@@ -22,30 +62,12 @@ export const owaspAgentHandler = async (event: unknown): Promise<string> => {
   ]);
 
   const bedrockModel = new BedrockModel({
-    modelId: 'qwen.qwen3-235b-a22b-2507-v1:0',
+    modelId: 'eu.amazon.nova-pro-v1:0',
     region: 'eu-central-1',
     additionalRequestFields: {
-      thinking: { type: 'disabled' },
       temperature: 0,
     },
   });
-
-  // Monkey-patch corretto: preserva il tipo async generator
-  const originalStream = bedrockModel.stream.bind(bedrockModel);
-  (bedrockModel as any).stream = async function* (params: any) {
-    if (params?.messages) {
-      params.messages = params.messages.map((msg: any) => ({
-        ...msg,
-        content: Array.isArray(msg.content)
-          ? msg.content.filter(
-              (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
-            )
-          : msg.content,
-      }));
-    }
-    yield* originalStream(params);
-  };
 
   const {
     s3Bucket: bucket,
@@ -53,45 +75,36 @@ export const owaspAgentHandler = async (event: unknown): Promise<string> => {
     orchestratorRaw,
   } = OwaspAgentEventSchema.parse(event);
 
-  const systemInstruction = `/no_think
-    You are an expert QA security auditor specialized in OWASP. 
-    You must follow this exact sequence of steps to explore the repository:
-    1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.
-    2. Second, use 'list_repository_files' passing the local base path returned from step 1 to understand the project structure.
-    3. Third, use 'read_file_content' to read critical files (like package.json, requirements.txt, server.js, auth logic) based on the absolute paths you found.
-    4. Finally, analyze the contents for OWASP vulnerabilities.
-    
-    CRITICAL OUTPUT INSTRUCTIONS:
-    - NO PREAMBLE. NO INTRO. NO OUTRO.
-    - DO NOT USE <thinking> TAGS.
-    - START your response IMMEDIATELY with the characters "## Riepilogo OWASP".
-    - If you use <thinking> tags, the system will fail. Output ONLY Markdown.
+  const systemInstruction = `
+    You are an automated security pipeline script.
+    CRITICAL INSTRUCTION: You MUST begin by executing the tool 'unzip_repo'.
+    Do NOT generate any text until AFTER you have successfully called 'unzip_repo'.
 
-    ## Riepilogo OWASP
-    - **Copertura Generale:** [Un breve paragrafo che descrive lo stato di sicurezza generale del repository]
-    - **Parametri OWASP Rispettati:** [Lista separata da virgole delle categorie OWASP che sono state implementate correttamente, es. Cryptographic Failures, Security Misconfiguration]
-    - **Parametri OWASP Violati:** [Lista separata da virgole delle vulnerabilità trovate, es. Injection, Broken Access Control]
+    YOUR WORKFLOW CONSISTS OF TWO STRICT PHASES:
 
-    ## Dettagli per File
-    [Ripeti il seguente blocco per OGNI file in cui hai trovato vulnerabilità. Se un file ha più vulnerabilità, crea un blocco per ciascuna]
+    ### PHASE 1: EXPLORATION (TOOL USAGE)
+    Use your tools to explore the repository. Do not guess.
+    1. Call 'unzip_repo' with the provided S3 bucket and zip path to extract the code.
+    2. Call 'list_repository_files' with the local base path to understand the structure.
+    3. Call 'read_file_content' multiple times to inspect critical files (auth controllers, db queries, package.json, etc.).
+    Take your time and use the tools as much as needed until you have enough context.
 
-    ### File: [Inserisci il percorso completo del file, es. /src/DBconnection.php]
-    - **Commento Generale:** [Spiega brevemente perché questo file è vulnerabile e quale rischio comporta]
-    - **Linee:** [Linea di inizio] - [Linea di fine]
-    - **Codice Vulnerabile:**
-    \`\`\`[linguaggio]
-    [Inserisci qui il frammento di codice originale sbagliato]
-    \`\`\`
-    - **Correzione Proposta:**
-    \`\`\`[linguaggio]
-    [Inserisci qui il frammento di codice corretto e sicuro]
-    \`\`\``;
+    ### PHASE 2: REPORTING (FINAL OUTPUT)
+    Only after finishing the tool usage, produce your final structured report.
+    Populate each field accurately based on the ACTUAL code you read:
+    - 'copertura_generale': a concise overview of the security posture.
+    - 'parametri_rispettati': OWASP categories that are correctly handled.
+    - 'parametri_violati': OWASP categories that are violated.
+    - 'vulnerabilita': one entry per issue found, with exact file path, line numbers,
+      the vulnerable snippet, and a corrected version. Leave empty if no issues found.
+  `;
 
   const owaspAgent = new Agent({
     name: 'OWASP_Auditor',
     model: bedrockModel,
     systemPrompt: systemInstruction,
     tools: [unzipRepo, listRepositoryFiles, readFileContent],
+    structuredOutputSchema: OwaspReportSchema,
   });
 
   const userPrompt = `Analyze OWASP vulnerabilities for the zipped repo in bucket '${bucket}' with key '${key}'. Context: ${orchestratorRaw ?? 'none'}`;
@@ -103,31 +116,17 @@ export const owaspAgentHandler = async (event: unknown): Promise<string> => {
       JSON.stringify(finalResponse, null, 2),
     );
 
-    // Estraiamo il primo blocco
     const firstBlock = finalResponse?.lastMessage?.content[0] as any;
 
-    // Controllo di sicurezza a runtime
     if (!firstBlock || typeof firstBlock.text !== 'string') {
       throw new Error(
         'Il formato della risposta non contiene il testo atteso.',
       );
     }
 
-    // Sostituisci la tua logica di pulizia con questa
-    const responseText = firstBlock.text;
-
-    // Rimuove TUTTO ciò che sta dentro <thinking> compresi i tag stessi
-    // La 's' flag permette al punto (.) di includere anche i newline
-    let cleanMarkdown = responseText.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
-
-    // Se il modello è così testardo da iniziare comunque con testo sporco prima del MD
-    // Forziamo l'inizio dal primo header Markdown
-    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) {
-      cleanMarkdown = cleanMarkdown.substring(startIndex);
-    }
-
-    return cleanMarkdown;
+    const parsedData = JSON.parse(firstBlock.text);
+    const validatedData = OwaspReportSchema.parse(parsedData);
+    return JSON.stringify(validatedData);
   } catch (err: any) {
     console.error(
       'Errore completo:',

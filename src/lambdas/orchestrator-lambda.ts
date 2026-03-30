@@ -62,7 +62,9 @@ const FileAnalysisSchema = z.object({
 const AnalysisDetailSchema = z.object({
   agentName: z
     .string()
-    .describe("Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA, Documentation)"),
+    .describe(
+      "Nome dell'agente che ha effettuato l'analisi (es. OWASP, QA, Documentation)",
+    ),
   files: z
     .array(FileAnalysisSchema)
     .describe('Lista dei file analizzati da questo agente'),
@@ -73,7 +75,10 @@ const OrchestratorOutputSchema = z.object({
   status: z.enum(['successo', 'fallito']),
   totalIssuesFound: z.number().int(),
   analysisDetails: z.array(AnalysisDetailSchema).optional(),
-  rawMarkdownReport: z.string().optional().describe("Il report testuale completo in formato Markdown")
+  rawMarkdownReport: z
+    .string()
+    .optional()
+    .describe('Il report testuale completo in formato Markdown'),
 });
 
 export type OrchestratorOutput = z.infer<typeof OrchestratorOutputSchema>;
@@ -101,7 +106,7 @@ export const orchestratorHandler = async (
         content: Array.isArray(msg.content)
           ? msg.content.filter(
               (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
+                !(block.type === 'text' && (block.text ?? '').trim() === ''),
             )
           : msg.content,
       }));
@@ -156,58 +161,42 @@ export const orchestratorHandler = async (
     invokeAgentLambda(process.env.LAMBDA_TEST_NAME!, payload),
   ]);
 
-  const systemInstruction = `You are a data converter. Your EXCLUSIVE goal is to transform Markdown security reports into a SINGLE valid JSON object.
+  const systemInstruction = `You are the Main Orchestrator API for a security pipeline.
 
-  RULES:
-  1. OUTPUT ONLY VALID JSON. No conversational text, no preambles, no "Here is the analysis".
-  2. If the input is Markdown, parse it and map it to the schema below.
-  3. DATA MAPPING:
-    - Extract 'filePath' from headers or bullet points, remove the first 2 directories.
-    - Extract 'startLine' and 'endLine' from patterns like "Linee: X-Y". If not found, use 0.
-    - Use the description of the vulnerability as 'reason'.
-    - If 'originalCode' or 'proposedCorrection' are missing in the Markdown, use an empty string "" but NEVER omit the field.
+  PHASE 1: TOOL EXECUTION
+  If the "Status" is RELEASE, you MUST use the 'run_documentation_analysis' tool. If it is NOT a release, skip this step.
 
-  REQUIRED JSON STRUCTURE:
-  {
-    "jobId": "string",
-    "status": "successo" | "fallito",
-    "totalIssuesFound": number,
-    "analysisDetails": [
-      {
-        "agentName": "OWASP" | "QA" | "Documentation",
-        "files": [
-          {
-            "filePath": "string",
-            "findings": [
-              { "startLine": 0, "endLine": 0, "reason": "string", "originalCode": "string", "proposedCorrection": "string" }
-            ]
-          }
-        ]
-      }
-    ]
-  }`;
+  PHASE 2: AGGREGATION
+  Map the provided reports EXACTLY into the required output schema.
+  
+  ERROR HANDLING: 
+  If any input report contains an error message or failed analysis, set "status" to "fallito". Add a finding with startLine 0, endLine 0, and put the exact error message inside the "reason" field.`;
 
   const orchestratorAgent = new Agent({
     name: 'Main_Orchestrator',
     model: bedrockModel,
     systemPrompt: systemInstruction,
     tools: [runDocumentationAnalysis],
+    structuredOutputSchema: OrchestratorOutputSchema,
   });
 
   const releaseStatus = isRelease
     ? 'This IS a RELEASE.'
     : 'This IS NOT a release.';
 
-  // Passiamo tutto all'agente: i risultati paralleli testuali (Markdown) e il contesto su cui deve decidere
-  const userPrompt = `Analyze the repo in bucket '${bucket}' under prefix '${key}'. 
+  // Creiamo il prompt utente pulito, passando il jobId come richiesto dallo schema
+  const currentJobId = (event as any).jobId || `job_${Date.now()}`;
+  const userPrompt = `
+  Job ID: ${currentJobId}
   Status: ${releaseStatus}
   Context: ${orchestratorRaw}
   
-  --- PRE-COMPUTED OWASP ANALYSIS (MARKDOWN) ---
+  --- PRE-COMPUTED OWASP ANALYSIS ---
   ${owaspResult}
   
-  --- PRE-COMPUTED TEST & QA ANALYSIS (MARKDOWN) ---
-  ${testResult}`;
+  --- PRE-COMPUTED TEST & QA ANALYSIS ---
+  ${testResult}
+  `;
 
   console.log("Invocazione dell'Orchestratore per la decisione e sintesi...");
 
@@ -216,29 +205,11 @@ export const orchestratorHandler = async (
     finalResponse = await orchestratorAgent.invoke(userPrompt);
   } catch (err: any) {
     console.error('=== ERRORE PROFONDO ===');
-    
-    // 1. Logga l'errore intero su CloudWatch (non perdoniamo nulla)
     console.error(JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
-
-    // 2. Estrai il messaggio in modo sicuro
-    let errorDetails = "Errore sconosciuto";
-    if (err instanceof Error) {
-        errorDetails = err.message;
-    } else if (typeof err === 'object' && err !== null) {
-        errorDetails = JSON.stringify(err);
-    } else {
-        errorDetails = String(err);
-    }
-
-    throw new Error(`Orchestratore fallito: ${errorDetails}`);
+    throw new Error(`Orchestratore fallito: ${err.message || String(err)}`);
   }
 
-  console.log(
-    'Risposta grezza dal modello:',
-    JSON.stringify(finalResponse, null, 2),
-  );
-
-  // 1. NAVIGHIAMO L'OGGETTO CORRETTAMENTE
+  // --- ESTRAZIONE A PROVA DI BOMBA ---
   const lastMessageContent = finalResponse?.lastMessage?.content;
 
   if (
@@ -246,29 +217,22 @@ export const orchestratorHandler = async (
     lastMessageContent.length === 0 ||
     typeof lastMessageContent[0].text !== 'string'
   ) {
-    throw new Error(
-      "Il formato della risposta non contiene il testo atteso nell'array lastMessage.content.",
-    );
+    throw new Error('Il formato della risposta non contiene il testo atteso.');
   }
 
   const rawText = lastMessageContent[0].text;
 
-  // Cerca la prima '{' e l'ultima '}' per estrarre solo il blocco JSON
-  const firstBracket = rawText.indexOf('{');
-  const lastBracket = rawText.lastIndexOf('}');
-
-  if (firstBracket === -1 || lastBracket === -1) {
-    throw new Error(`Il modello non ha generato un JSON. Testo ricevuto: ${rawText.substring(0, 100)}...`);
-  }
-
-  const jsonString = rawText.substring(firstBracket, lastBracket + 1);
-
   try {
-    const parsedData = JSON.parse(jsonString);
-    // Validazione finale con Zod
+    // Zero regex, zero indexOf, zero pulizie. È già un JSON perfetto.
+    const parsedData = JSON.parse(rawText);
+
+    // Zod darà sempre l'ok perché l'LLM è stato costretto a monte a rispettare lo schema!
     return OrchestratorOutputSchema.parse(parsedData);
-  } catch (e) {
-    console.error("Errore nel parsing del JSON estratto:", jsonString);
+  } catch (e: any) {
+    console.error(
+      'Errore nel parsing del JSON strutturato. Testo restituito:',
+      rawText,
+    );
     throw new Error(`JSON malformato: ${e.message}`);
   }
 };

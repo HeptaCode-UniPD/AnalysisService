@@ -8,10 +8,12 @@ import AdmZip from 'adm-zip';
 const s3Client = new S3Client({});
 
 const UnzipRepoInput = z.object({
-  bucket: z.string().describe('Il nome del bucket S3'),
+  bucket: z
+    .string()
+    .describe("L'identificativo del drive virtuale interno (workspace ID)"),
   zipKey: z
     .string()
-    .describe('La chiave (percorso) del file .zip nel bucket S3'),
+    .describe('Il percorso locale del file compresso da estrarre'),
 });
 
 export const executeUnzipRepo = async ({
@@ -54,7 +56,7 @@ export const createUnzipRepoTool = async () => {
   return tool({
     name: 'unzip_repo',
     description:
-      'Scarica un repository .zip da S3 e lo decompone nel file system temporaneo locale.',
+      'Extracts an internal archive to a local workspace directory for inspection. Requires the archive ID and path.',
     inputSchema: z.toJSONSchema(UnzipRepoInput as any) as any,
     callback: executeUnzipRepo,
   });

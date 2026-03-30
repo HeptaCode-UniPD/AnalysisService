@@ -3,19 +3,70 @@ import { createUnzipRepoTool } from './tools/decompressione-zip.tool';
 import { createReadFileContentTool } from './tools/read-file-content.tool';
 import { createFindDocumentationFilesTool } from './tools/find-docs-files.tool';
 
-// Manteniamo Zod solo per validare l'input in ingresso
 const DocAgentEventSchema = z.object({
   s3Bucket: z.string(),
   s3Key: z.string(),
   orchestratorRaw: z.string().optional(),
 });
 
-// Nota: Il tipo di ritorno ora è Promise<string>, non più l'oggetto Zod
+const DocsReportSchema = z.object({
+  punteggio_completezza: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .describe('Punteggio da 0 a 10 sulla completezza della documentazione.'),
+  sintesi_generale: z
+    .string()
+    .describe('Breve paragrafo sulla qualità generale della documentazione.'),
+  sezioni_mancanti: z
+    .array(z.string())
+    .describe(
+      'Lista delle sezioni assenti, es. ["Changelog", "API Docs", "Contribution Guidelines"].',
+    ),
+  raccomandazioni: z
+    .array(z.string())
+    .describe('Lista di suggerimenti per migliorare la documentazione.'),
+  file_analizzati: z
+    .array(
+      z.object({
+        file_path: z
+          .string()
+          .describe('Percorso completo del file analizzato, es. /README.md.'),
+        linea_inizio: z
+          .number()
+          .int()
+          .describe('Linea di inizio del problema. 0 se non applicabile.'),
+        linea_fine: z
+          .number()
+          .int()
+          .describe('Linea di fine del problema. 0 se non applicabile.'),
+        commento_generale: z
+          .string()
+          .describe(
+            'Spiegazione di cosa manca o è scritto male in questo file.',
+          ),
+        testo_problematico: z
+          .string()
+          .describe(
+            'Pezzo di testo mancante o confuso. Stringa vuota se non applicabile.',
+          ),
+        correzione_proposta: z
+          .string()
+          .describe('Testo proposto o integrazione da fare.'),
+      }),
+    )
+    .describe(
+      'Un blocco per ogni file di documentazione che necessita di migliorie. Vuoto se la repo non ha documentazione.',
+    ),
+});
+
+export type DocsReport = z.infer<typeof DocsReportSchema>;
+
 export const docAgentHandler = async (event: unknown): Promise<string> => {
   const { Agent } = await import('@strands-agents/sdk');
   const { BedrockModel } = await import('@strands-agents/sdk/bedrock');
 
-  // Creiamo i tool tramite factory async
   const [unzipRepo, findDocumentationFiles, readFileContent] =
     await Promise.all([
       createUnzipRepoTool(),
@@ -24,7 +75,7 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
     ]);
 
   const bedrockModel = new BedrockModel({
-    modelId: 'qwen.qwen3-235b-a22b-2507-v1:0',
+    modelId: 'eu.amazon.nova-pro-v1:0',
     region: 'eu-central-1',
     additionalRequestFields: {
       thinking: { type: 'disabled' },
@@ -32,7 +83,7 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
     },
   });
 
-  // Monkey-patch corretto: preserva il tipo async generator
+  // Monkey-patch: filtra i blocchi di testo vuoti che causano errori con Nova
   const originalStream = bedrockModel.stream.bind(bedrockModel);
   (bedrockModel as any).stream = async function* (params: any) {
     if (params?.messages) {
@@ -41,7 +92,7 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
         content: Array.isArray(msg.content)
           ? msg.content.filter(
               (block: any) =>
-                !(block.type === 'text' && (block.text ?? '').trim() === '')
+                !(block.type === 'text' && (block.text ?? '').trim() === ''),
             )
           : msg.content,
       }));
@@ -55,47 +106,30 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
     orchestratorRaw,
   } = DocAgentEventSchema.parse(event);
 
-  // === NUOVO PROMPT IN MARKDOWN STRUTTURATO ===
-  const systemInstruction = `/no_think
-    You are an expert technical writer and documentation auditor. 
+  const systemInstruction = `
+    You are an expert technical writer and documentation auditor.
     You must follow this exact sequence of steps to explore the repository:
-    1. First, use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository locally. This will return a local base path.
-    2. Second, use 'find_documentation_files' passing the local base path returned from step 1 to locate READMEs, ADRs, and guides.
-    3. Third, use 'read_file_content' to read the main documentation files you found, in order to evaluate setup instructions, API docs, and contribution guidelines.
-    4. Finally, evaluate the overall documentation completeness and quality.
-    
-    CRITICAL OUTPUT INSTRUCTIONS:
-    - NO PREAMBLE. NO INTRO. NO OUTRO.
-    - DO NOT USE <thinking> TAGS.
-    - START your response IMMEDIATELY with the characters "## Riepilogo Documentazione".
-    - If you use <thinking> tags, the system will fail. Output ONLY Markdown.
+    1. Use 'unzip_repo' with the provided S3 bucket and zip key to extract the repository. This returns a local base path.
+    2. Use 'find_documentation_files' with the local base path to locate READMEs, ADRs, and guides.
+    3. Use 'read_file_content' to read the main documentation files found, evaluating setup instructions, API docs, and contribution guidelines.
+    4. Evaluate the overall documentation completeness and quality.
 
-    ## Riepilogo Documentazione
-    - **Punteggio Completezza:** [Assegna un voto da 0 a 10]
-    - **Sintesi Generale:** [Un breve paragrafo sulla qualità generale della documentazione]
-    - **Sezioni Mancanti:** [Lista separata da virgole delle sezioni assenti, es. Changelog, API Docs, Contribution Guidelines]
-    - **Raccomandazioni:** [Lista separata da virgole dei suggerimenti per migliorare]
-
-    ## Dettagli per File
-    [Ripeti il seguente blocco per OGNI file analizzato che necessita di migliorie. Se non ci sono file o la repo è vuota, scrivi "Nessun file di documentazione trovato."]
-
-    ### File: [Inserisci il percorso completo del file, es. /README.md]
-    - **Linee:** [Linea di inizio] - [Linea di fine] (Se applicabile, altrimenti 0 - 0)
-    - **Commento Generale:** [Spiega brevemente cosa manca o cosa è scritto male]
-    - **Codice Vulnerabile:**
-    \`\`\`text
-    [Inserisci qui l'eventuale pezzo di testo mancante o confuso, o lascia vuoto]
-    \`\`\`
-    - **Correzione Proposta:**
-    \`\`\`text
-    [Inserisci qui la proposta di testo o l'integrazione da fare]
-    \`\`\``;
+    After completing the tool usage, produce your final structured report by populating each field:
+    - 'punteggio_completezza': integer from 0 to 10.
+    - 'sintesi_generale': concise overview of the documentation quality.
+    - 'sezioni_mancanti': list of missing sections (e.g. "Changelog", "API Docs").
+    - 'raccomandazioni': list of actionable improvement suggestions.
+    - 'file_analizzati': one entry per file that needs improvement, with path, line range,
+      a comment explaining the issue, the problematic text, and a proposed correction.
+      If no documentation files are found, return an empty array.
+  `;
 
   const docAgent = new Agent({
     name: 'Documentation_Auditor',
     model: bedrockModel,
     systemPrompt: systemInstruction,
     tools: [unzipRepo, findDocumentationFiles, readFileContent],
+    structuredOutputSchema: DocsReportSchema,
   });
 
   const userPrompt = `Analyze documentation for the zipped repo in bucket '${bucket}' with key '${key}'. Context: ${orchestratorRaw ?? 'none'}`;
@@ -107,7 +141,6 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
       JSON.stringify(finalResponse, null, 2),
     );
 
-    // Estrazione sicura del testo
     const firstBlock = finalResponse?.lastMessage?.content[0] as any;
 
     if (!firstBlock || typeof firstBlock.text !== 'string') {
@@ -116,21 +149,9 @@ export const docAgentHandler = async (event: unknown): Promise<string> => {
       );
     }
 
-    // Sostituisci la tua logica di pulizia con questa
-    const responseText = firstBlock.text;
-
-    // Rimuove TUTTO ciò che sta dentro <thinking> compresi i tag stessi
-    // La 's' flag permette al punto (.) di includere anche i newline
-    let cleanMarkdown = responseText.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
-
-    // Se il modello è così testardo da iniziare comunque con testo sporco prima del MD
-    // Forziamo l'inizio dal primo header Markdown
-    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) {
-      cleanMarkdown = cleanMarkdown.substring(startIndex);
-    }
-
-    return cleanMarkdown;
+    const parsedData = JSON.parse(firstBlock.text);
+    const validatedData = DocsReportSchema.parse(parsedData);
+    return JSON.stringify(validatedData);
   } catch (err: any) {
     console.error(
       'Errore completo:',

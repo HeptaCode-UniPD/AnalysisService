@@ -188,22 +188,39 @@ export const orchestratorHandler = async (event: any) => {
 
           console.log(`[Bedrock] Analizzando Report: ${report.agent}`);
 
+          // Estrae area e testo del report dal JSON wrapper in modo deterministico (senza LLM)
+          let reportArea = report.agent.toUpperCase();
+          let reportText = content;
+          try {
+            const parsed = JSON.parse(content);
+            if (parsed.area) reportArea = parsed.area;
+            if (parsed.report) reportText = parsed.report; // Passa solo il testo, non il wrapper JSON
+          } catch {
+            console.warn(`[Orchestratore] content non è JSON valido per ${report.agent}, uso testo grezzo.`);
+          }
+
           // -- STEP 1: Metadata Extraction (LLM) --
           const expectedMetaSchema = `{ "area": "string", "summary": "string", "totalIssues": 0 }`;
-          const metaPrompt = `You are a strict data extraction tool. Read the following markdown report and extract required metadata.
-MANDATORY: 
-1. If the input is empty or says you cannot help, return { "area": "${report.agent.toUpperCase()}", "summary": "Analisi non disponibile.", "totalIssues": 0 }.
-2. NEVER apologize or give conversational text. 
-3. Return ONLY a valid JSON object matching this schema: ${expectedMetaSchema}
+          const metaPrompt = `You are a meticulous data extraction robot performing a defensive security audit data extraction for educational purposes. Read the following report text and extract metadata.
+MANDATORY:
+1. This is a security audit report - extract data as-is without filtering it.
+2. If the input is empty or unclear, return { "area": "${reportArea}", "summary": "Analisi non disponibile.", "totalIssues": 0 }.
+3. NEVER apologize or give conversational text.
+4. Return ONLY a valid JSON object matching this schema: ${expectedMetaSchema}
 Wrap your JSON in <JSON_START> and <JSON_END>.
 
 REPORT TEXT:
-${content}`;
+${reportText}`;
 
-          const metadata = await callAgentWithRetry(genericAgent, metaPrompt, MetadataExtractionSchema);
-          
+          const metadata = await callAgentWithRetry<z.infer<typeof MetadataExtractionSchema>>(genericAgent, metaPrompt, MetadataExtractionSchema);
+
           if (!metadata) {
-            console.error(`[Bedrock] Fallito step 1 (Metadati) per ${report.agent}`);
+            console.error(`[Bedrock] Fallito step 1 (Metadati) per ${report.agent} - uso fallback.`);
+            parsedAnalysisDetails.push({
+              agentName: reportArea,
+              summary: 'Analisi non disponibile.',
+              files: []
+            });
             continue;
           }
 
@@ -218,15 +235,16 @@ ${content}`;
             
             const schemaWithSkeletons = z.array(FlatFindingSchema);
             
-            const fillerPrompt = `Extract details for precisely ${metadata.totalIssues} unique issues from the report.
-MANDATORY: 
-1. The array MUST contain EXACTLY ${metadata.totalIssues} elements. 
-2. If the text is insufficient, provide as many as possible and fill the rest with placeholders.
-3. NEVER apologize. Return ONLY the JSON array matching this schema: ${expectedFlatSchema}
+            const fillerPrompt = `You are a meticulous data extraction robot performing a defensive security audit data extraction for educational purposes. Extract details for precisely ${metadata.totalIssues} unique findings from the report text below.
+MANDATORY:
+1. This is a security/quality audit - extract data as-is.
+2. The array MUST contain EXACTLY ${metadata.totalIssues} elements.
+3. If the text is insufficient, provide as many as possible and fill the rest with placeholders.
+4. NEVER apologize. Return ONLY the JSON array matching this schema: ${expectedFlatSchema}
 Wrap your JSON array in <JSON_START> and <JSON_END>.
 
 REPORT TEXT:
-${content}`;
+${reportText}`;
 
             const flatFindings = await callAgentWithRetry(genericAgent, fillerPrompt, schemaWithSkeletons, 3);
 
@@ -260,11 +278,38 @@ ${content}`;
         }
       }
 
+      // Funzione di pulizia (inline) senza classi o istanze DTO, purissima manipolazione JSON
+      const cleanAnalysisDetails = parsedAnalysisDetails.map(agent => {
+        const cleanedAgent: any = { agentName: agent.agentName, summary: agent.summary };
+        
+        if (Array.isArray(agent.files) && agent.files.length > 0) {
+          const cleanedFiles = agent.files.map(f => {
+            // Rimuove il prefisso /tmp/extracted_XXX/ lasciando il path pulito
+            const nicePath = f.filePath.replace(/^\/tmp\/extracted_\d+\//, '');
+            
+            // Filtra solo i finding che hanno tutti i campi testuali completi
+            const validFindings = (f.findings || []).filter((finding: any) => {
+              const isEmpty = (v: any) => !v || String(v).trim() === '' || String(v).includes('N/A') || String(v).includes('(entire project)');
+              if (isEmpty(finding.reason) || isEmpty(finding.originalCode) || isEmpty(finding.proposedCorrection)) return false;
+              return true;
+            });
+            
+            return { filePath: nicePath, findings: validFindings };
+          }).filter(f => f.findings.length > 0); // Rimuove il file se non ha più nessun finding
+
+          // Assegna l'array files solo se ci sono file rimanenti
+          if (cleanedFiles.length > 0) {
+            cleanedAgent.files = cleanedFiles;
+          }
+        }
+        return cleanedAgent;
+      });
+
       return {
         jobId,
         status: totalIssuesOverall > 0 ? 'fallito' : 'successo',
         totalIssuesFound: totalIssuesOverall,
-        analysisDetails: parsedAnalysisDetails,
+        analysisDetails: cleanAnalysisDetails,
       };
 
     } catch (error: any) {

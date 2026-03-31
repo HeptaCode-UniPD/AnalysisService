@@ -211,13 +211,14 @@ export const docAgentHandler = async (event: unknown) => {
     const startIndex = cleanMarkdown.indexOf('## Riepilogo');
     if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    const reportKey = `${s3Prefix}/docs-report.md`;
+    const reportKey = `${s3Prefix}/docs-report.json`;
+    const reportPayload = JSON.stringify({ area: 'DOCS', report: cleanMarkdown });
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: reportKey,
-        Body: cleanMarkdown,
-        ContentType: 'text/markdown',
+        Body: reportPayload,
+        ContentType: 'application/json',
       }),
     );
 

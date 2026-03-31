@@ -232,13 +232,14 @@ export const owaspAgentHandler = async (event: unknown) => {
     const startIndex = cleanMarkdown.indexOf('## Riepilogo');
     if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    const reportKey = `${s3Prefix}/owasp-report.md`;
+    const reportKey = `${s3Prefix}/owasp-report.json`;
+    const reportPayload = JSON.stringify({ area: 'OWASP', report: cleanMarkdown });
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: reportKey,
-        Body: cleanMarkdown,
-        ContentType: 'text/markdown',
+        Body: reportPayload,
+        ContentType: 'application/json',
       }),
     );
 

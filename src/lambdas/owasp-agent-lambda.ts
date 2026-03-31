@@ -48,7 +48,20 @@ export const owaspAgentHandler = async (event: unknown) => {
 
     while (true) {
       console.log('OWASP: Invoking AWS Bedrock Agent...');
-      const response = await bedrockClient.send(command);
+      
+      let response;
+      let attempt = 0;
+      while (attempt < 3) {
+        try {
+          response = await bedrockClient.send(command);
+          break; // Esci dal ciclo try se l'invocazione ha successo
+        } catch (err: any) {
+          attempt++;
+          console.warn(`[OWASP] Errore API AWS (tentativo ${attempt}/3):`, err?.message);
+          if (attempt >= 3) throw err; // Propaga l'errore se abbiamo esaurito i tentativi
+          await new Promise((res) => setTimeout(res, 2000 * attempt)); // Exponential backoff (2s, 4s)
+        }
+      }
 
       let returnControlInvocationResults: any[] = [];
       let returnControlInvocationId: string | undefined;
@@ -123,12 +136,6 @@ export const owaspAgentHandler = async (event: unknown) => {
                       f.endsWith('.c') ||
                       f.endsWith('.cpp') ||
                       f.endsWith('.cs') ||
-                      f.endsWith('.html') ||
-                      f.endsWith('.css') ||
-                      f.endsWith('.md') ||
-                      f.endsWith('.json') ||
-                      f.endsWith('.yaml') ||
-                      f.endsWith('.yml') ||
                       f.endsWith('.sql')) &&
                     !f.includes('node_modules') &&
                     !f.includes('.git') &&

@@ -48,9 +48,22 @@ export const testAgentHandler = async (event: unknown) => {
 
     while (true) {
       console.log('TEST: Invoking AWS Bedrock Agent...');
-      const response = await bedrockClient.send(command);
+      
+      let response;
+      let attempt = 0;
+      while (attempt < 3) {
+        try {
+          response = await bedrockClient.send(command);
+          break; // Esci dal ciclo try se l'invocazione ha successo
+        } catch (err: any) {
+          attempt++;
+          console.warn(`[TEST] Errore API AWS (tentativo ${attempt}/3):`, err?.message);
+          if (attempt >= 3) throw err; // Propaga l'errore se abbiamo esaurito i tentativi
+          await new Promise((res) => setTimeout(res, 2000 * attempt)); // Exponential backoff (2s, 4s)
+        }
+      }
 
-      if (!response.completion) {
+      if (!response || !response.completion) {
         console.error('TEST: response.completion is undefined.');
         break;
       }

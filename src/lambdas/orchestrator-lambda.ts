@@ -275,6 +275,14 @@ ${reportText}`;
             summary: metadata.summary || 'Nessun sommario provvisto.',
             files: groupedFiles
           });
+        } else {
+          // Fallback se l'agente è andato in timeout/crash prima di arrivare all'orchestratore
+          console.warn(`[Orchestratore] L'agente ${report.agent} ha status: ${report.status}. Aggiungo fallback.`);
+          parsedAnalysisDetails.push({
+            agentName: report.agent.toUpperCase(),
+            summary: `Analisi non disponibile (${report.error || 'errore di esecuzione'}).`,
+            files: [] // L'array vuoto verrà poi pulito dalla funzione finale
+          });
         }
       }
 
@@ -284,13 +292,24 @@ ${reportText}`;
         
         if (Array.isArray(agent.files) && agent.files.length > 0) {
           const cleanedFiles = agent.files.map(f => {
-            // Rimuove il prefisso /tmp/extracted_XXX/ lasciando il path pulito
-            const nicePath = f.filePath.replace(/^\/tmp\/extracted_\d+\//, '');
+            // Rimuove il prefisso /tmp/extracted_XXX/ (lo slash finale è opzionale)
+            let nicePath = f.filePath.replace(/^\/tmp\/extracted_\d+\/?/, '');
+            if (nicePath.trim() === '') nicePath = 'Intero progetto';
             
             // Filtra solo i finding che hanno tutti i campi testuali completi
             const validFindings = (f.findings || []).filter((finding: any) => {
-              const isEmpty = (v: any) => !v || String(v).trim() === '' || String(v).includes('N/A') || String(v).includes('(entire project)');
-              if (isEmpty(finding.reason) || isEmpty(finding.originalCode) || isEmpty(finding.proposedCorrection)) return false;
+              const isEmpty = (v: any) =>
+                !v ||
+                String(v).trim() === '' ||
+                String(v).includes('N/A') ||
+                String(v).toLowerCase().includes('placeholder') ||
+                String(v).includes('(entire project)');
+              if (
+                isEmpty(finding.reason) ||
+                isEmpty(finding.originalCode) ||
+                isEmpty(finding.proposedCorrection)
+              )
+                return false;
               return true;
             });
             

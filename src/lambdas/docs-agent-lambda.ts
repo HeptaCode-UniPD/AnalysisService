@@ -48,7 +48,20 @@ export const docAgentHandler = async (event: unknown) => {
 
     while (true) {
       console.log('DOCS: Invoking AWS Bedrock Agent...');
-      const response = await bedrockClient.send(command);
+      
+      let response;
+      let attempt = 0;
+      while (attempt < 3) {
+        try {
+          response = await bedrockClient.send(command);
+          break; // Esci dal ciclo try se l'invocazione ha successo
+        } catch (err: any) {
+          attempt++;
+          console.warn(`[DOCS] Errore API AWS (tentativo ${attempt}/3):`, err?.message);
+          if (attempt >= 3) throw err; // Propaga l'errore se abbiamo esaurito i tentativi
+          await new Promise((res) => setTimeout(res, 2000 * attempt)); // Exponential backoff (2s, 4s)
+        }
+      }
 
       if (!response.completion) {
         console.error('DOCS: response.completion is undefined.');

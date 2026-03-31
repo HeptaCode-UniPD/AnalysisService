@@ -63,6 +63,7 @@ functions:
     handler: dist/lambdas/pull-repo.handler
     timeout: 900
     memorySize: 8192
+    ephemeralStorageSize: 8192
     environment:
       S3_BUCKET_NAME: !Ref RepositoryBucket
     layers:
@@ -75,7 +76,8 @@ functions:
   orchestrator:
     handler: dist/lambdas/orchestrator-lambda.orchestratorHandler
     timeout: 900
-    memorySize: 4096
+    memorySize: 8192
+    ephemeralStorageSize: 8192
     environment:
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
@@ -84,17 +86,20 @@ functions:
   owaspAgent:
     handler: dist/lambdas/owasp-agent-lambda.owaspAgentHandler
     timeout: 900
-    memorySize: 4096
+    memorySize: 8192
+    ephemeralStorageSize: 8192
 
   testAgent:
     handler: dist/lambdas/test-agent-lambda.testAgentHandler
     timeout: 900
-    memorySize: 4096
+    memorySize: 8192
+    ephemeralStorageSize: 8192
 
   docsAgent:
     handler: dist/lambdas/docs-agent-lambda.docAgentHandler
     timeout: 900
-    memorySize: 4096
+    memorySize: 8192
+    ephemeralStorageSize: 8192
 
 # Definizione della Step Function
 stepFunctions:

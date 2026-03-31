@@ -2,10 +2,16 @@ import { z } from 'zod';
 import { getFilesRecursive } from '../utils/get-file-recursive';
 
 const FindTestFilesInput = z.object({
-  basePath: z.string().describe('Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)'),
+  basePath: z
+    .string()
+    .describe(
+      'Il percorso completo della cartella locale estratta (es. /tmp/extracted_123)',
+    ),
 });
 
-const callback = async ({ basePath }: z.infer<typeof FindTestFilesInput>): Promise<string> => {
+const callback = async ({
+  basePath,
+}: z.infer<typeof FindTestFilesInput>): Promise<string> => {
   try {
     const allFiles = await getFilesRecursive(basePath);
     const testFiles = allFiles.filter((filePath) => {
@@ -32,7 +38,8 @@ export const createFindTestFilesTool = async () => {
   const { tool } = await import('@strands-agents/sdk');
   return tool({
     name: 'find_test_files',
-    description: 'Ottiene la lista dei file di test (.test.ts, .spec.js, ecc.) e configurazioni CI/CD (.github/workflows/, jest.config). Richiede il percorso locale restituito da unzip_repo.',
+    description:
+      'Ottiene la lista dei file di test (.test.ts, .spec.js, ecc.) e configurazioni CI/CD (.github/workflows/, jest.config). Richiede il percorso locale restituito da unzip_repo.',
     inputSchema: FindTestFilesInput,
     callback,
   });

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { BedrockAgentRuntimeClient, InvokeAgentCommand } from '@aws-sdk/client-bedrock-agent-runtime';
+import {
+  BedrockAgentRuntimeClient,
+  InvokeAgentCommand,
+} from '@aws-sdk/client-bedrock-agent-runtime';
 import { randomUUID } from 'crypto';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { listRepositoryFiles } from './tools/find-all-files.tool';
@@ -21,7 +24,11 @@ const AGENT_ALIAS_ID = process.env.TEST_AGENT_ALIAS_ID || 'TSTALIASID';
 export const testAgentHandler = async (event: unknown) => {
   console.log('TEST: START');
   try {
-    const { s3Bucket: bucket, s3Key: key, s3Prefix } = TestAgentEventSchema.parse(event);
+    const {
+      s3Bucket: bucket,
+      s3Key: key,
+      s3Prefix,
+    } = TestAgentEventSchema.parse(event);
 
     console.log('TEST: downloading and extracting repo...');
     const extractPath = await unzipRepoToTemp(bucket, key);
@@ -69,7 +76,8 @@ export const testAgentHandler = async (event: unknown) => {
             let httpMethod = '';
 
             if (invocation.functionInvocationInput) {
-              actionGroup = invocation.functionInvocationInput.actionGroup || '';
+              actionGroup =
+                invocation.functionInvocationInput.actionGroup || '';
               functionName = invocation.functionInvocationInput.function || '';
               parameters = invocation.functionInvocationInput.parameters || [];
             } else if (invocation.apiInvocationInput) {
@@ -79,36 +87,68 @@ export const testAgentHandler = async (event: unknown) => {
               httpMethod = invocation.apiInvocationInput.httpMethod || 'POST';
               functionName = apiPath.replace(/^\//, '');
               const apiParams = invocation.apiInvocationInput.parameters || [];
-              const bodyParams = invocation.apiInvocationInput.requestBody?.content?.['application/json']?.properties || [];
+              const bodyParams =
+                invocation.apiInvocationInput.requestBody?.content?.[
+                  'application/json'
+                ]?.properties || [];
               parameters = [...apiParams, ...bodyParams];
             } else {
               continue;
             }
 
-            console.log(`TEST: Executing local tool -> ${functionName} with params:`, JSON.stringify(parameters));
+            console.log(
+              `TEST: Executing local tool -> ${functionName} with params:`,
+              JSON.stringify(parameters),
+            );
 
             let toolResponse = '';
             try {
               if (functionName === 'list_repository_files') {
-                const rawContent = await listRepositoryFiles.callback({ basePath: extractPath });
+                const rawContent = await listRepositoryFiles.callback({
+                  basePath: extractPath,
+                });
                 const lines = rawContent.split('\n');
-                const filtered = lines.filter(f => 
-                  (f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.php') || f.endsWith('.py') || f.endsWith('.java') || f.endsWith('.go') || f.endsWith('.rb') || f.endsWith('.c') || f.endsWith('.cpp') || f.endsWith('.cs') || f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.md') || f.endsWith('.json') || f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.sql')) && 
-                  !f.includes('node_modules') && 
-                  !f.includes('.git') &&
-                  !f.includes('/vendor/') &&
-                  !f.includes('/dist/')
+                const filtered = lines.filter(
+                  (f) =>
+                    (f.endsWith('.ts') ||
+                      f.endsWith('.js') ||
+                      f.endsWith('.php') ||
+                      f.endsWith('.py') ||
+                      f.endsWith('.java') ||
+                      f.endsWith('.go') ||
+                      f.endsWith('.rb') ||
+                      f.endsWith('.c') ||
+                      f.endsWith('.cpp') ||
+                      f.endsWith('.cs') ||
+                      f.endsWith('.html') ||
+                      f.endsWith('.css') ||
+                      f.endsWith('.md') ||
+                      f.endsWith('.json') ||
+                      f.endsWith('.yaml') ||
+                      f.endsWith('.yml') ||
+                      f.endsWith('.sql')) &&
+                    !f.includes('node_modules') &&
+                    !f.includes('.git') &&
+                    !f.includes('/vendor/') &&
+                    !f.includes('/dist/'),
                 );
                 toolResponse = filtered.slice(0, 1000).join('\n');
               } else if (functionName === 'read_file_content') {
-                let filePath = parameters?.find((p: any) => p.name === 'filePath')?.value || '';
+                let filePath =
+                  parameters?.find((p: any) => p.name === 'filePath')?.value ||
+                  '';
                 if (!filePath || filePath === '') {
                   toolResponse = 'Error: Missing filePath parameter.';
                 } else {
                   if (!filePath.startsWith('/tmp/')) {
                     const path = require('path');
-                    filePath = path.join(extractPath, filePath.replace(/^[/\\]+/, ''));
-                    console.log(`TEST: Coerced relative filePath to absolute: ${filePath}`);
+                    filePath = path.join(
+                      extractPath,
+                      filePath.replace(/^[/\\]+/, ''),
+                    );
+                    console.log(
+                      `TEST: Coerced relative filePath to absolute: ${filePath}`,
+                    );
                   }
                   const content = await readFileContent.callback({ filePath });
                   toolResponse = content.substring(0, 24000);
@@ -121,7 +161,9 @@ export const testAgentHandler = async (event: unknown) => {
               toolResponse = `Error executing tool: ${err.message}`;
             }
 
-            console.log(`TEST: Tool execution finished. Response length: ${toolResponse.length}`);
+            console.log(
+              `TEST: Tool execution finished. Response length: ${toolResponse.length}`,
+            );
 
             if (isApi) {
               returnControlInvocationResults.push({
@@ -132,10 +174,10 @@ export const testAgentHandler = async (event: unknown) => {
                   httpStatusCode: 200,
                   responseBody: {
                     'application/json': {
-                      body: JSON.stringify({ result: toolResponse })
-                    }
-                  }
-                }
+                      body: JSON.stringify({ result: toolResponse }),
+                    },
+                  },
+                },
               });
             } else {
               returnControlInvocationResults.push({
@@ -143,24 +185,27 @@ export const testAgentHandler = async (event: unknown) => {
                   actionGroup,
                   function: functionName,
                   responseBody: {
-                    TEXT: { body: toolResponse }
-                  }
-                }
+                    TEXT: { body: toolResponse },
+                  },
+                },
               });
             }
           }
         }
       }
 
-      if (returnControlInvocationResults.length > 0 && returnControlInvocationId) {
+      if (
+        returnControlInvocationResults.length > 0 &&
+        returnControlInvocationId
+      ) {
         command = new InvokeAgentCommand({
           agentId: AGENT_ID,
           agentAliasId: AGENT_ALIAS_ID,
           sessionId,
           sessionState: {
             invocationId: returnControlInvocationId,
-            returnControlInvocationResults
-          }
+            returnControlInvocationResults,
+          },
         });
       } else {
         finalMarkdownReport = streamedText;
@@ -170,22 +215,29 @@ export const testAgentHandler = async (event: unknown) => {
 
     console.log('TEST Agent invocation complete.');
 
-    let cleanMarkdown = finalMarkdownReport.replace(/<thinking>.*?<\/thinking>/gs, '').trim();
+    let cleanMarkdown = finalMarkdownReport
+      .replace(/<thinking>.*?<\/thinking>/gs, '')
+      .trim();
     const startIndex = cleanMarkdown.indexOf('## Riepilogo');
     if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
     const reportKey = `${s3Prefix}/test-report.md`;
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: reportKey,
-      Body: cleanMarkdown,
-      ContentType: 'text/markdown',
-    }));
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: reportKey,
+        Body: cleanMarkdown,
+        ContentType: 'text/markdown',
+      }),
+    );
 
     return { agent: 'test', status: 'success', reportKey };
-
   } catch (err: any) {
     console.error('TEST CRASH:', err?.message, err?.stack);
-    return { agent: 'test', status: 'error', error: err?.message ?? 'crash silenzioso' };
+    return {
+      agent: 'test',
+      status: 'error',
+      error: err?.message ?? 'crash silenzioso',
+    };
   }
 };

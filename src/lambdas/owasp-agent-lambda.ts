@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { listRepositoryFiles } from './tools/find-all-files.tool';
 import { readFileContent } from './tools/read-file-content.tool';
+import { extractJsonFromMarkdown } from './utils/extract-json-from-markdown';
 
 const s3Client = new S3Client({});
 const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
@@ -226,23 +227,24 @@ export const owaspAgentHandler = async (event: unknown) => {
 
     console.log('OWASP Agent invocation complete.');
 
-    let cleanMarkdown = finalMarkdownReport
+    const cleanMarkdown = finalMarkdownReport
       .replace(/<thinking>.*?<\/thinking>/gs, '')
       .trim();
-    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    const reportKey = `${s3Prefix}/owasp-report.md`;
+    console.log('OWASP: Extracting structured JSON from markdown...');
+    const agentReport = await extractJsonFromMarkdown(cleanMarkdown, 'OWASP');
+
+    const reportKey = `${s3Prefix}/owasp-report.json`;
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: reportKey,
-        Body: cleanMarkdown,
-        ContentType: 'text/markdown',
+        Body: JSON.stringify(agentReport ?? { agentName: 'OWASP', summary: 'Extraction failed.', totalIssues: 0, files: [] }),
+        ContentType: 'application/json',
       }),
     );
 
-    return { agent: 'owasp', status: 'success', reportKey };
+    return { agent: 'owasp', status: agentReport ? 'success' : 'partial', reportKey };
   } catch (err: any) {
     console.error('OWASP CRASH:', err?.message, err?.stack);
     return {

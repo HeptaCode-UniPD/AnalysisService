@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { listRepositoryFiles } from './tools/find-all-files.tool';
 import { readFileContent } from './tools/read-file-content.tool';
+import { extractJsonFromMarkdown } from './utils/extract-json-from-markdown';
 
 const s3Client = new S3Client({});
 const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
@@ -110,23 +111,13 @@ export const docAgentHandler = async (event: unknown) => {
                 const lines = rawContent.split('\n');
                 const filtered = lines.filter(
                   (f) =>
-                    (f.endsWith('.ts') ||
-                      f.endsWith('.js') ||
-                      f.endsWith('.php') ||
-                      f.endsWith('.py') ||
-                      f.endsWith('.java') ||
-                      f.endsWith('.go') ||
-                      f.endsWith('.rb') ||
-                      f.endsWith('.c') ||
-                      f.endsWith('.cpp') ||
-                      f.endsWith('.cs') ||
-                      f.endsWith('.html') ||
-                      f.endsWith('.css') ||
-                      f.endsWith('.md') ||
+                    (f.endsWith('.md') ||
+                      f.endsWith('.txt') ||
                       f.endsWith('.json') ||
                       f.endsWith('.yaml') ||
                       f.endsWith('.yml') ||
-                      f.endsWith('.sql')) &&
+                      f.includes('/docs/') ||
+                      f.includes('/doc/')) &&
                     !f.includes('node_modules') &&
                     !f.includes('.git') &&
                     !f.includes('/vendor/') &&
@@ -215,23 +206,26 @@ export const docAgentHandler = async (event: unknown) => {
 
     console.log('DOCS Agent invocation complete.');
 
-    let cleanMarkdown = finalMarkdownReport
+    console.log('DOCS Agent invocation complete.');
+
+    const cleanMarkdown = finalMarkdownReport
       .replace(/<thinking>.*?<\/thinking>/gs, '')
       .trim();
-    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    const reportKey = `${s3Prefix}/docs-report.md`;
+    console.log('DOCS: Extracting structured JSON from markdown...');
+    const agentReport = await extractJsonFromMarkdown(cleanMarkdown, 'DOCS');
+
+    const reportKey = `${s3Prefix}/docs-report.json`;
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: reportKey,
-        Body: cleanMarkdown,
-        ContentType: 'text/markdown',
+        Body: JSON.stringify(agentReport ?? { agentName: 'DOCS', summary: 'Extraction failed.', totalIssues: 0, files: [] }),
+        ContentType: 'application/json',
       }),
     );
 
-    return { agent: 'docs', status: 'success', reportKey };
+    return { agent: 'docs', status: agentReport ? 'success' : 'partial', reportKey };
   } catch (err: any) {
     console.error('DOCS CRASH:', err?.message, err?.stack);
     return {

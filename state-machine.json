@@ -137,12 +137,7 @@
           "payload": {
             "jobId": "{% $jobId %}",
             "s3Bucket": "{% $s3Bucket %}",
-            "reports": "{% $parallelResults[].Payload %}",
-            "agentPayloads": {
-              "owasp": "{% $agentPayload %}",
-              "test": "{% $agentPayload %}",
-              "docs": "{% $agentPayload %}"
-            }
+            "reports": "{% $parallelResults[].Payload %}"
           }
         }
       },

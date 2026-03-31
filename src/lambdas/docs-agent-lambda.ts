@@ -8,7 +8,6 @@ import { randomUUID } from 'crypto';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { listRepositoryFiles } from './tools/find-all-files.tool';
 import { readFileContent } from './tools/read-file-content.tool';
-import { extractJsonFromMarkdown } from './utils/extract-json-from-markdown';
 
 const s3Client = new S3Client({});
 const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
@@ -206,26 +205,23 @@ export const docAgentHandler = async (event: unknown) => {
 
     console.log('DOCS Agent invocation complete.');
 
-    console.log('DOCS Agent invocation complete.');
-
-    const cleanMarkdown = finalMarkdownReport
+    let cleanMarkdown = finalMarkdownReport
       .replace(/<thinking>.*?<\/thinking>/gs, '')
       .trim();
+    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
+    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
 
-    console.log('DOCS: Extracting structured JSON from markdown...');
-    const agentReport = await extractJsonFromMarkdown(cleanMarkdown, 'DOCS');
-
-    const reportKey = `${s3Prefix}/docs-report.json`;
+    const reportKey = `${s3Prefix}/docs-report.md`;
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: reportKey,
-        Body: JSON.stringify(agentReport ?? { agentName: 'DOCS', summary: 'Extraction failed.', totalIssues: 0, files: [] }),
-        ContentType: 'application/json',
+        Body: cleanMarkdown,
+        ContentType: 'text/markdown',
       }),
     );
 
-    return { agent: 'docs', status: agentReport ? 'success' : 'partial', reportKey };
+    return { agent: 'docs', status: 'success', reportKey };
   } catch (err: any) {
     console.error('DOCS CRASH:', err?.message, err?.stack);
     return {

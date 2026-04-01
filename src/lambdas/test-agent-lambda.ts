@@ -57,11 +57,11 @@ CONTESTO CODICE (chunk ${i + 1}/${sourceChunks.length}):
 ${sourceChunks[i]}
 
 COMPITO:
-1. Cerca file di test (.spec, .test, __tests__, /tests/, /test/). Se non ne trovi in questo chunk, scrivi esplicitamente "Nessun file di test trovato in questo chunk."
-2. Se trovi test, valuta qualità: asserzioni, casi limite, mocking.
-3. Fornisci "Maturity Score" (0-100) solo se questo è l'ultimo chunk (${i + 1} di ${sourceChunks.length}).
-   REGOLA: se nell'intero repo non esiste alcun file di test il Maturity Score DEVE essere 0.
-PRODUCI: Report in Markdown con titolo "## 🧪 Analisi QA e Copertura (chunk ${i + 1}/${sourceChunks.length})".`,
+1. Elenca esclusivamente i file di test (.spec, .test, __tests__, /tests/, /test/) che trovi in questo chunk.
+2. Se ne trovi, valuta qualità tecnica, casi limite e mocking.
+3. Se non trovi nulla, scrivi 'Nessun file di test rilevato in questo chunk'. NON trarre conclusioni globali.
+4. Fornisci un Maturity Score (0-100) basandosi su ciò che vedi qui.
+PRODUCI: Report tecnico in Markdown con titolo "## 🧪 Analisi QA e Copertura (chunk ${i + 1}/${sourceChunks.length})".`,
           `QA_EXPERT_${i + 1}`,
         ));
       }
@@ -100,11 +100,11 @@ CONTESTO CODICE (chunk ${i + 1}/${sourceChunks.length}):
 ${sourceChunks[i]}
 
 COMPITO:
-1. Analizza complessità ciclomatica, aderenza a SOLID/DRY.
-2. Identifica "Code Smells" (funzioni troppo lunghe, duplicazioni, coupling eccessivo).
-3. Se non trovi problemi scrivi "Nessun code smell rilevato in questo chunk."
-4. Fornisci "Maturity Score" (0-100) solo se questo è l'ultimo chunk (${i + 1} di ${sourceChunks.length}).
-PRODUCI: Report in Markdown con titolo "## 🔍 Audit Qualità del Codice (chunk ${i + 1}/${sourceChunks.length})".`,
+1. Identifica specifici "Code Smells" (complessità, duplicazione, coupling) presenti esclusivamente in questo chunk.
+2. Fornisci dettagli tecnici su dove si trovano le criticità osservate.
+3. Se non trovi problemi, scrivi 'Nessuna criticità qualitativa rilevata in questo chunk'.
+4. Fornisci un Maturity Score (0-100) basandosi su ciò che vedi qui.
+PRODUCI: Report tecnico in Markdown con titolo "## 🔍 Audit Qualità del Codice (chunk ${i + 1}/${sourceChunks.length})".`,
           `CODE_AUDITOR_${i + 1}`,
         ));
       }
@@ -123,7 +123,7 @@ PRODUCI: Report in Markdown con titolo "## 🔍 Audit Qualità del Codice (chunk
       AGENT_LEAD_ID,
       `${NO_TOOLS}
 
-RUOLO: QA & Test Lead (Sintetizzatore Strategico).
+RUOLO: QA & Test Lead (Giudice Globale).
 
 ANALISI RICEVUTE:
 ---
@@ -139,16 +139,16 @@ ${auditRes}
 ---
 
 COMPITO:
-1. Riorganizza in "## 🔍 Rischi Qualità e Copertura".
-2. Elimina duplicati (stessa issue in chunk diversi).
-3. Per OGNI deficit:
+1. Esegui una SINTESI GLOBALE della qualità e stabilità.
+2. VERDETTO TEST: Un file di test è considerato ESISTENTE se appare in almeno uno dei report specialistici. 
+   - Se NESSUN report menziona test, allora e solo allora dichiara 'Assenza totale di test' (Maturity Score 0).
+3. Riorganizza i risultati in "## 🔍 Rischi Qualità e Copertura".
+4. Per OGNI deficit unificato:
    - **Rischio**: [Titolo]
-   - **Dettaglio Tecnico**: [Perché è un problema e dove]
-   - **Mitigazione**: [Come risolvere con esempio concreto]
-4. IMPORTANTE: se tutti i chunk QA riportano "Nessun file di test trovato", il Maturity Score DEVE essere 0 e va dichiarato esplicitamente che il progetto non ha test.
+   - **Dettaglio Tecnico**: [Dove e perché è un problema]
+   - **Mitigazione**: [Azione correttiva con esempio]
 5. Includi i test boilerplate in "## 🛠️ Test Suggeriti".
-6. Fornisci "Global Maturity Score" (0-100) con motivazione.
-7. NON USARE MAI TABELLE.
+6. Fornisci "Global Maturity Score" (0-100) basandoti sulla visione d'insieme.
 PRODUCI: Report Finale in Markdown con header "# 🏆 Quality & Testing Overview".`,
       'TEST_LEAD',
     );

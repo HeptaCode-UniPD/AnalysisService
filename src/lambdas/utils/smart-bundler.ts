@@ -1,4 +1,4 @@
-import { readFileSync, unlinkSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, unlinkSync, existsSync } from 'fs';
 
 const MAX_BUNDLE_CHARS = 150_000;
 
@@ -174,20 +174,4 @@ export function extractImportedLibraries(sourceChunks: string | string[]): strin
   }
 
   return Array.from(libs).sort();
-}
-
-/**
- * Ritorna la lista dei file presenti nella root del progetto estratto.
- * Utile per dare agli agenti la certezza dell'esistenza di README, LICENSE, ecc.
- */
-export function getTopLevelFiles(extractPath: string): string[] {
-  try {
-    if (!existsSync(extractPath)) return [];
-    return readdirSync(extractPath, { withFileTypes: true })
-      .filter(item => !item.isDirectory())
-      .map(item => item.name);
-  } catch (err) {
-    console.error(`[SmartBundler] Errore listing top-level files:`, err);
-    return [];
-  }
 }

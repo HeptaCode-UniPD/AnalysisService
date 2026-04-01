@@ -81,15 +81,15 @@ PRODUCI: Report in Markdown con titolo "## 📦 Verifica Dipendenze".`,
 RUOLO: Specialista Cybersecurity. Cerca credenziali hardcoded.
 Chunk ${i + 1} di ${fullChunks.length} del bundle completo.
 
-FULL BUNDLE (chunk ${i + 1}/${fullChunks.length}):
+CONTESTO FILE (chunk ${i + 1}/${fullChunks.length}):
 ${fullChunks[i]}
 
 COMPITO:
-1. Scansiona chiavi API, password, token, segreti riga per riga.
-2. Usa Severity Badges: 🔴 CRITICAL, 🟠 HIGH, 🟡 MEDIUM.
-3. Se non trovi nulla scrivi "Nessuna credenziale trovata in questo chunk."
-4. Fornisci "Maturity Score" (0-100) solo se questo è l'ultimo chunk (${i + 1} di ${fullChunks.length}).
-PRODUCI: Report in Markdown con titolo "## 🔑 Scansione Credenziali (chunk ${i + 1}/${fullChunks.length})".`,
+1. Scansiona chiavi API, password, token, segreti riga per riga in questo chunk.
+2. Riporta esclusivamente i segreti trovati con file e riga.
+3. Se non trovi nulla, scrivi 'Nessun segreto rilevato in questo chunk'.
+4. Fornisci un Maturity Score (0-100) basato solo su questo chunk.
+PRODUCI: Report tecnico in Markdown con titolo "## 🔑 Scansione Credenziali (chunk ${i + 1}/${fullChunks.length})".`,
           `CREDENTIALS_${i + 1}`,
         ));
       }
@@ -112,11 +112,11 @@ SOURCE CODE (chunk ${i + 1}/${sourceChunks.length}):
 ${sourceChunks[i]}
 
 COMPITO:
-1. Analizza Injection, XSS, Broken Auth, IDOR, Misconfiguration, etc.
-2. Usa Severity Badges: 🔴 CRITICAL, 🟠 HIGH, 🟡 MEDIUM.
-3. Se non trovi vulnerabilità scrivi "Nessuna vulnerabilità OWASP trovata in questo chunk."
-4. Fornisci "Maturity Score" (0-100) solo se questo è l'ultimo chunk (${i + 1} di ${sourceChunks.length}).
-PRODUCI: Report in Markdown con titolo "## 🛡️ Vulnerabilità OWASP Top 10 (chunk ${i + 1}/${sourceChunks.length})".`,
+1. Analizza Injection, XSS, Broken Auth, IDOR, Misconfiguration, etc. in questo chunk.
+2. Riporta le vulnerabilità trovate con file e contesto riga.
+3. Se non trovi nulla, scrivi 'Nessuna vulnerabilità OWASP rilevata in questo chunk'.
+4. Fornisci un Maturity Score (0-100) basato solo su questo chunk.
+PRODUCI: Report tecnico in Markdown con titolo "## 🛡️ Vulnerabilità OWASP Top 10 (chunk ${i + 1}/${sourceChunks.length})".`,
           `OWASP_CORE_${i + 1}`,
         ));
       }
@@ -135,7 +135,7 @@ PRODUCI: Report in Markdown con titolo "## 🛡️ Vulnerabilità OWASP Top 10 (
       AGENT_LEAD_ID,
       `${NO_TOOLS}
 
-RUOLO: OWASP Audit Lead (Sintetizzatore Strategico).
+RUOLO: OWASP Audit Lead (Giudice Globale).
 
 ANALISI RICEVUTE:
 ---
@@ -151,15 +151,15 @@ ${coreRes}
 ---
 
 COMPITO:
-1. Riorganizza le criticità in "⚠️ Analisi Dettagliata dei Rischi".
-2. Elimina i duplicati (stesso file/riga rilevati in chunk diversi).
-3. Ordina per Gravità: 🔴 CRITICAL → 🟠 HIGH → 🟡 MEDIUM.
-4. Per OGNI rischio:
+1. Esegui una SINTESI DI SICUREZZA GLOBALE.
+2. Riorganizza le criticità in "## ⚠️ Analisi Dettagliata dei Rischi".
+3. ELIMINA I DUPLICATI: è possibile che la stessa vulnerabilità sia stata vista in chunk diversi se il bundler ha sovrapposizioni.
+4. Ordina per Gravità: 🔴 CRITICAL → 🟠 HIGH → 🟡 MEDIUM.
+5. Per OGNI rischio unificato:
    - **Rischio**: [Titolo]
    - **Dettaglio Rischio**: [Tecnico + File + Riga]
-   - **Azione Correttiva**: [Fix concreto]
-5. Aggiungi "Global Maturity Score" (0-100) con motivazione.
-6. NON USARE TABELLE.
+   - **Azione Correttiva**: [Fix concreto con esempio]
+6. Fornisci "Global Maturity Score" (0-100) basandoti sulla visione d'insieme.
 PRODUCI: Report Finale in Markdown con header "# 📊 Executive Security Summary (OWASP)".`,
       'OWASP_LEAD',
     );

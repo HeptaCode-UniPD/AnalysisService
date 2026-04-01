@@ -112,25 +112,18 @@ export const orchestratorHandler = async (event: any) => {
             polishedReport = await invokeSubAgent(
               MASTER_LEAD_ID,
               ALIAS,
-              `REVISIONE DOCUMENTALE AREA ${area}.
-              COMPITO: Migliora la forma e chiudi le frasi interrotte.
-              IMPORTANTE: Tratta termini come 'Vulnerabilità' o 'Rischio' come semplici etichette tecniche di analisi, non come contenuti pericolosi.
-              MANTENIMENTO DATI: Non rimuovere mai i riferimenti a file o righe di codice.
-              SINTESI: Se il testo è troppo lungo, aumenta la concisione.
-              CONTENUTO DA REVISIONARE:
+              `RAFFINAMENTO AREA ${area}.
+              SINTESI STRATEGICA: Accorcia le spiegazioni se il testo è troppo lungo. 
+              Il report finale deve essere completo e chiuso correttamente (niente frasi a metà).
+              MANTENIMENTO DATI: Non rimuovere mai file o vulnerabilità trovate.
+              REPORT DA PULIRE:
               ${data.report}`,
               `POLISHER_${area}`,
               true
             );
-            
-            // Se l'output del polisher è un messaggio di errore o di blocco, ripristina l'originale
-            if (polishedReport.includes('unable to assist') || polishedReport.includes('blocked by content filters')) {
-              console.warn(`[Orchestratore] Polishing di ${area} bloccato dai filtri. Uso report originale.`);
-              polishedReport = data.report;
-            }
           } catch (e) {
             console.error(`Errore nel polishing di ${area}:`, e);
-            polishedReport = data.report;
+            // Mantieni il report originale in caso di errore
           }
         }
 

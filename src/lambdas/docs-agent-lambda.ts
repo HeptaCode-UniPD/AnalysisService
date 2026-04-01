@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
-import { createFullChunks, getTopLevelFiles } from './utils/smart-bundler';
+import { createFullChunks } from './utils/smart-bundler';
 import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
 
 const s3Client = new S3Client({});
@@ -32,16 +32,12 @@ export const docAgentHandler = async (event: unknown) => {
 
     console.log('DOCS: extraction and bundling...');
     const extractPath = await unzipRepoToTemp(bucket, key);
-    const topLevelFiles = getTopLevelFiles(extractPath);
     const fullChunks = await createFullChunks(extractPath);
-    console.log(`DOCS: ${fullChunks.length} full chunk(s). Files found: ${topLevelFiles.join(', ')}`);
-
-    const fileMetadataInfo = `LISTA FILE REALI NELLA ROOT: [${topLevelFiles.join(', ')}]. 
-    Se un file è in questa lista, ESISTE nel progetto. Ignora segnalazioni contrarie.`;
+    console.log(`DOCS: ${fullChunks.length} full chunk(s).`);
 
     console.log('DOCS: launching parallel sub-analyses...');
 
-    // ── 1. Technical Review — tutti i chunk in sequenza ──
+    // ── 1. Tech Review — tutti i chunk in sequenza ──
     const techResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
@@ -50,24 +46,21 @@ export const docAgentHandler = async (event: unknown) => {
           AGENT_TECH_ID,
           `${NO_TOOLS}
 
-RUOLO: Technical Writer. Analizza la documentazione tecnica.
-${fileMetadataInfo}
-
+RUOLO: Senior Technical Writer. Analizza la documentazione tecnica in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
-CONTESTO FILE:
-${fullChunks[i]}
 
 COMPITO:
-1. Esamina README, istruzioni, API docs. Se il README è nella LISTA FILE REALI sopra, consideralo PRESENTE.
-2. Se non lo vedi nel testo di questo chunk, non dire che manca: dì solo che non è in questo frammento.
-PRODUCI: Report in Markdown con titolo "## 📘 Revisione Tecnica (chunk ${i + 1}/${fullChunks.length})".`,
+1. Identifica: README, guide, API docs e commenti tecnici (JSDoc/PHPDoc).
+2. Se non trovi nulla, scrivi 'Nessuna documentazione tecnica rilevata in questo chunk'.
+3. NON segnalare mancanze globali. Riporta solo ciò che vedi qui.
+PRODUCI: Report tecnico in Markdown con titolo "## 📘 Revisione Tecnica (chunk ${i + 1}/${fullChunks.length})".`,
           `TECH_WRITER_${i + 1}`,
         ));
       }
       return parts.join('\n\n---\n\n');
     })();
 
-    // ── 2. Standard & Review — tutti i chunk in sequenza ──
+    // ── 2. Compliance & Standards — tutti i chunk in sequenza ──
     const govResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
@@ -76,17 +69,15 @@ PRODUCI: Report in Markdown con titolo "## 📘 Revisione Tecnica (chunk ${i + 1
           AGENT_GOV_ID,
           `${NO_TOOLS}
 
-RUOLO: Project Standard Officer. Verifica la presenza di file informativi.
-${fileMetadataInfo}
-
+RUOLO: Project Standard Officer. Analizza file informativi e legali in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
-CONTESTO FILE:
-${fullChunks[i]}
 
 COMPITO:
-1. Cerca LICENSE, security e contributi. Se sono nella LISTA FILE REALI sopra, considerali PRESENTI.
-PRODUCI: Report in Markdown con titolo "## ⚖️ Standard di Progetto (chunk ${i + 1}/${fullChunks.length})".`,
-          `STANDARD_OFFICER_${i + 1}`,
+1. Identifica: LICENSE, informative security, CONTRIBUTING o file legali.
+2. Se non trovi nulla, scrivi 'Nessun file informativo rilevato in questo chunk'.
+3. NON segnalare mancanze globali. Riporta solo ciò che vedi qui.
+PRODUCI: Report tecnico in Markdown con titolo "## ⚖️ Standard di Progetto (chunk ${i + 1}/${fullChunks.length})".`,
+          `COMPLIANCE_OFFICER_${i + 1}`,
         ));
       }
       return parts.join('\n\n---\n\n');
@@ -100,20 +91,25 @@ PRODUCI: Report in Markdown con titolo "## ⚖️ Standard di Progetto (chunk ${
       AGENT_LEAD_ID,
       `${NO_TOOLS}
 
-RUOLO: Project Documentation Lead.
-${fileMetadataInfo}
+RUOLO: Project Documentation Lead (Giudice Globale).
 
 ANALISI RICEVUTE:
 ---
 ${techRes}
+
 ---
 ${govRes}
 ---
 
 COMPITO:
-1. **DETERMINISMO ASSOLUTO SULLE ESISTENZE**: Se un file (README, LICENSE, ecc.) è nella LISTA FILE REALI sopra, devi dichiarare che il file ESISTE. Ignora ogni dubbio degli esperti.
-2. Riorganizza in "## ⚖️ Analisi Standard e UX".
-3. Fornisci "Global Maturity Score" (0-100).
+1. Esegui una SINTESI GLOBALE. Un file (es. README, LICENSE) è PRESENTE se appare in ALMENO uno dei report.
+2. SEGNALA COME MANCANTE solo ciò che non appare in NESSUNO dei report ricevuti.
+3. Riorganizza in "## ⚖️ Analisi Standard e UX".
+4. Per ogni deficit globale:
+   - **Punto Critico**: [Descrizione]
+   - **Dettaglio**: [Perché è un problema]
+   - **Suggerimento**: [Azione correttiva]
+5. Fornisci "Global Maturity Score" (0-100) basandoti sulla visione d'insieme.
 PRODUCI: Report Finale in Markdown con header "# 📘 Documentation & UX Strategy".`,
       'DOCS_LEAD',
     );

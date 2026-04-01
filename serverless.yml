@@ -20,7 +20,7 @@ provider:
         - states:StartExecution
       Resource:
         - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
-    # Permesso all'Orchestratore di chiamare gli Agenti AI (se servisse)
+    # Permesso all'Orchestratore di chiamare gli Agenti AI
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
@@ -34,13 +34,14 @@ provider:
       Resource: '*'
 
 package:
-  individually: false
+  individually: true
   patterns:
     - '!src/**'
     - '!test/**'
     - '!.github/**'
+    - '!.husky/**'
+    - '!node_modules/**'
     - 'dist/**'
-    - 'node_modules/**'
 
 build:
   esbuild: false
@@ -52,6 +53,13 @@ plugins:
 functions:
   wrapperAdapter:
     handler: dist/wrapper/handler.startAnalysis
+    package:
+      patterns:
+        - 'dist/**'
+        - 'node_modules/**'
+        - '!node_modules/esbuild/**'
+        - '!node_modules/@types/**'
+        - '!node_modules/typescript/**'
     environment:
       STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ms2-pipeline-${sls:stage}'
     events:
@@ -61,6 +69,10 @@ functions:
 
   pullRepoToS3:
     handler: dist/lambdas/pull-repo.handler
+    package:
+      patterns:
+        - 'dist/lambdas/pull-repo.js'
+        - 'dist/lambdas/tools/decompressione-zip.tool.js'
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
@@ -71,10 +83,18 @@ functions:
 
   webhookSender:
     handler: dist/lambdas/webhook.handler
+    package:
+      patterns:
+        - 'dist/lambdas/webhook.js'
     timeout: 15
 
   orchestrator:
     handler: dist/lambdas/orchestrator-lambda.orchestratorHandler
+    package:
+      patterns:
+        - 'dist/lambdas/orchestrator-lambda.js'
+        - 'dist/lambdas/utils/agent-invoker.js'
+        - 'dist/lambdas/utils/markdown-helper.js'
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
@@ -82,24 +102,93 @@ functions:
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
       LAMBDA_DOCS_NAME: ms2-analysis-service-${sls:stage}-docsAgent
+      MASTER_LEAD_AGENT_ID: "A8A2WWKF9S"
 
   owaspAgent:
     handler: dist/lambdas/owasp-agent-lambda.owaspAgentHandler
+    package:
+      patterns:
+        - 'dist/lambdas/owasp-agent-lambda.js'
+        - 'dist/lambdas/utils/smart-bundler.js'
+        - 'dist/lambdas/tools/decompressione-zip.tool.js'
+        # Tutte le node_modules: repomix ha dipendenze transitive non mappabili staticamente
+        - 'node_modules/**'
+        - '!node_modules/esbuild/**'
+        - '!node_modules/@types/**'
+        - '!node_modules/typescript/**'
+        - '!node_modules/ts-node/**'
+        - '!node_modules/ts-jest/**'
+        - '!node_modules/jest/**'
+        - '!node_modules/jest-*/**'
+        - '!node_modules/@jest/**'
+        - '!node_modules/eslint/**'
+        - '!node_modules/eslint-*/**'
+        - '!node_modules/@eslint/**'
+        - '!node_modules/prettier/**'
+        - '!node_modules/husky/**'
+        - '!node_modules/lint-staged/**'
+        - '!node_modules/serverless/**'
+        - '!node_modules/serverless-*/**'
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
+    environment:
+      # Bedrock Agents v2 (Premium Multi-Agent)
+      OWASP_DEP_AGENT_ID: "KUE8YYMLKK"     # Specialist: Dependency
+      OWASP_CREDS_AGENT_ID: "QDRECNXUGR"   # Specialist: Secret Scanner
+      OWASP_CORE_AGENT_ID: "FJPDLGYFQM"    # Specialist: OWASP Top 10
+      OWASP_LEAD_AGENT_ID: "PILT1S5IL6"    # AREA LEAD: OWASP Aggregator
+
+      TEST_QA_AGENT_ID: "EXDHLR6GUP"       # Specialist: QA Expert
+      TEST_GEN_AGENT_ID: "3IIAWFA9BC"      # Specialist: Test Architect
+      TEST_AUDIT_AGENT_ID: "BNBKYAFDME"    # Specialist: Software Auditor
+      TEST_AGENT_ID: "L3EB5WS1ZU"          # AREA LEAD: TEST Aggregator
+
+      DOCS_TECH_AGENT_ID: "ZPFNNQK2FO"     # Specialist: Tech Reviewer
+      DOCS_GOV_AGENT_ID: "UVFEQBJS1T"      # Specialist: Governance Officer
+      DOCS_AGENT_ID: "DB16ZAYK3A"          # AREA LEAD: DOCS Aggregator
+      OWASP_AGENT_ALIAS_ID: TSTALIASID
 
   testAgent:
     handler: dist/lambdas/test-agent-lambda.testAgentHandler
+    package:
+      patterns:
+        - 'dist/lambdas/test-agent-lambda.js'
+        - 'dist/lambdas/utils/smart-bundler.js'
+        - 'dist/lambdas/tools/decompressione-zip.tool.js'
+        - 'node_modules/**'
+        - '!node_modules/esbuild/**'
+        - '!node_modules/@types/**'
+        - '!node_modules/typescript/**'
+        # ... altri shortcut per ridurre il peso ...
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
+    environment:
+      TEST_QA_AGENT_ID: L3EB5WS1ZU      # Sostituire con specialisti se presenti
+      TEST_GEN_AGENT_ID: L3EB5WS1ZU
+      TEST_AUDIT_AGENT_ID: L3EB5WS1ZU
+      TEST_AGENT_ALIAS_ID: TSTALIASID
 
   docsAgent:
     handler: dist/lambdas/docs-agent-lambda.docAgentHandler
+    package:
+      patterns:
+        - 'dist/lambdas/docs-agent-lambda.js'
+        - 'dist/lambdas/utils/smart-bundler.js'
+        - 'dist/lambdas/tools/decompressione-zip.tool.js'
+        - 'node_modules/**'
+        - '!node_modules/esbuild/**'
+        - '!node_modules/@types/**'
+        - '!node_modules/typescript/**'
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
+    environment:
+      DOCS_TECH_AGENT_ID: DB16ZAYK3A    # Sostituire con specialisti se presenti
+      DOCS_GOV_AGENT_ID: DB16ZAYK3A
+      DOCS_UX_AGENT_ID: DB16ZAYK3A
+      DOCS_AGENT_ALIAS_ID: TSTALIASID
 
 # Definizione della Step Function
 stepFunctions:

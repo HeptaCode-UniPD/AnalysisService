@@ -1,16 +1,10 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import {
-  BedrockAgentRuntimeClient,
-  InvokeAgentCommand,
-} from '@aws-sdk/client-bedrock-agent-runtime';
-import { randomUUID } from 'crypto';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
-import { listRepositoryFiles } from './tools/find-all-files.tool';
-import { readFileContent } from './tools/read-file-content.tool';
+import { createFullChunks, getTopLevelFiles } from './utils/smart-bundler';
+import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
 
 const s3Client = new S3Client({});
-const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
 
 const DocAgentEventSchema = z.object({
   s3Bucket: z.string(),
@@ -18,230 +12,127 @@ const DocAgentEventSchema = z.object({
   s3Prefix: z.string(),
 });
 
-const AGENT_ID = process.env.DOCS_AGENT_ID || 'DB16ZAYK3A';
-const AGENT_ALIAS_ID = process.env.DOCS_AGENT_ALIAS_ID || 'TSTALIASID';
+const AGENT_TECH_ID  = process.env.DOCS_TECH_AGENT_ID  || 'ZPFNNQK2FO';
+const AGENT_GOV_ID   = process.env.DOCS_GOV_AGENT_ID   || 'UVFEQBJS1T';
+const AGENT_LEAD_ID  = process.env.DOCS_AGENT_ID        || 'DB16ZAYK3A';
+const ALIAS          = process.env.DOCS_AGENT_ALIAS_ID  || 'TSTALIASID';
+
+const NO_TOOLS = `⚠️ REGOLA FERREA: NON USARE TOOL. Hai già tutto il contesto nel testo sotto. Produci solo il report Markdown richiesto.`;
+
+const invokeSpec = (id: string, prompt: string, name: string) =>
+  invokeSubAgent(id, ALIAS, prompt, name, false);
+
+const invokeLead = (id: string, prompt: string, name: string) =>
+  invokeSubAgent(id, ALIAS, prompt, name, true);
 
 export const docAgentHandler = async (event: unknown) => {
-  console.log('DOCS: START');
+  console.log('DOCS MULTI-AGENT (v2): START');
   try {
-    const {
-      s3Bucket: bucket,
-      s3Key: key,
-      s3Prefix,
-    } = DocAgentEventSchema.parse(event);
+    const { s3Bucket: bucket, s3Key: key, s3Prefix } = DocAgentEventSchema.parse(event);
 
-    console.log('DOCS: downloading and extracting repo...');
+    console.log('DOCS: extraction and bundling...');
     const extractPath = await unzipRepoToTemp(bucket, key);
-    console.log(`DOCS: repo extracted to ${extractPath}`);
+    const topLevelFiles = getTopLevelFiles(extractPath);
+    const fullChunks = await createFullChunks(extractPath);
+    console.log(`DOCS: ${fullChunks.length} full chunk(s). Files found: ${topLevelFiles.join(', ')}`);
 
-    const sessionId = randomUUID();
-    const initialPrompt = `Please analyze the documentation of the codebase extracted in this local directory: ${extractPath}\nUse your available tools to list all files, read the key source files (controllers, services, modules, README), and produce your documentation report.`;
+    const fileMetadataInfo = `LISTA FILE REALI NELLA ROOT: [${topLevelFiles.join(', ')}]. 
+    Se un file è in questa lista, ESISTE nel progetto. Ignora segnalazioni contrarie.`;
 
-    let command = new InvokeAgentCommand({
-      agentId: AGENT_ID,
-      agentAliasId: AGENT_ALIAS_ID,
-      sessionId,
-      inputText: initialPrompt,
-    });
+    console.log('DOCS: launching parallel sub-analyses...');
 
-    let finalMarkdownReport = '';
+    // ── 1. Technical Review — tutti i chunk in sequenza ──
+    const techResPromise = (async () => {
+      const parts: string[] = [];
+      for (let i = 0; i < fullChunks.length; i++) {
+        console.log(`DOCS: Tech review chunk ${i + 1}/${fullChunks.length}...`);
+        parts.push(await invokeSpec(
+          AGENT_TECH_ID,
+          `${NO_TOOLS}
 
-    while (true) {
-      console.log('DOCS: Invoking AWS Bedrock Agent...');
-      
-      let response;
-      let attempt = 0;
-      while (attempt < 3) {
-        try {
-          response = await bedrockClient.send(command);
-          break; // Esci dal ciclo try se l'invocazione ha successo
-        } catch (err: any) {
-          attempt++;
-          console.warn(`[DOCS] Errore API AWS (tentativo ${attempt}/3):`, err?.message);
-          if (attempt >= 3) throw err; // Propaga l'errore se abbiamo esaurito i tentativi
-          await new Promise((res) => setTimeout(res, 2000 * attempt)); // Exponential backoff (2s, 4s)
-        }
+RUOLO: Technical Writer. Analizza la documentazione tecnica.
+${fileMetadataInfo}
+
+Chunk ${i + 1} di ${fullChunks.length}.
+CONTESTO FILE:
+${fullChunks[i]}
+
+COMPITO:
+1. Esamina README, istruzioni, API docs. Se il README è nella LISTA FILE REALI sopra, consideralo PRESENTE.
+2. Se non lo vedi nel testo di questo chunk, non dire che manca: dì solo che non è in questo frammento.
+PRODUCI: Report in Markdown con titolo "## 📘 Revisione Tecnica (chunk ${i + 1}/${fullChunks.length})".`,
+          `TECH_WRITER_${i + 1}`,
+        ));
       }
+      return parts.join('\n\n---\n\n');
+    })();
 
-      if (!response.completion) {
-        console.error('DOCS: response.completion is undefined.');
-        break;
+    // ── 2. Standard & Review — tutti i chunk in sequenza ──
+    const govResPromise = (async () => {
+      const parts: string[] = [];
+      for (let i = 0; i < fullChunks.length; i++) {
+        console.log(`DOCS: Service scan chunk ${i + 1}/${fullChunks.length}...`);
+        parts.push(await invokeSpec(
+          AGENT_GOV_ID,
+          `${NO_TOOLS}
+
+RUOLO: Project Standard Officer. Verifica la presenza di file informativi.
+${fileMetadataInfo}
+
+Chunk ${i + 1} di ${fullChunks.length}.
+CONTESTO FILE:
+${fullChunks[i]}
+
+COMPITO:
+1. Cerca LICENSE, security e contributi. Se sono nella LISTA FILE REALI sopra, considerali PRESENTI.
+PRODUCI: Report in Markdown con titolo "## ⚖️ Standard di Progetto (chunk ${i + 1}/${fullChunks.length})".`,
+          `STANDARD_OFFICER_${i + 1}`,
+        ));
       }
+      return parts.join('\n\n---\n\n');
+    })();
 
-      let returnControlInvocationResults: any[] = [];
-      let returnControlInvocationId: string | undefined;
-      let streamedText = '';
+    const [techRes, govRes] = await Promise.all([techResPromise, govResPromise]);
 
-      for await (const chunk of response.completion) {
-        if (chunk.chunk) {
-          streamedText += new TextDecoder().decode(chunk.chunk.bytes);
-        } else if (chunk.returnControl) {
-          console.log('DOCS: Intercepted Return of Control from AWS!');
-          returnControlInvocationId = chunk.returnControl.invocationId;
-          const invocationInputs = chunk.returnControl.invocationInputs || [];
+    console.log('DOCS: specialized analysis complete. Starting Domain Lead aggregation...');
 
-          for (const invocation of invocationInputs) {
-            let actionGroup = '';
-            let functionName = '';
-            let parameters: any[] = [];
-            let isApi = false;
-            let apiPath = '';
-            let httpMethod = '';
+    const finalReport = await invokeLead(
+      AGENT_LEAD_ID,
+      `${NO_TOOLS}
 
-            if (invocation.functionInvocationInput) {
-              actionGroup =
-                invocation.functionInvocationInput.actionGroup || '';
-              functionName = invocation.functionInvocationInput.function || '';
-              parameters = invocation.functionInvocationInput.parameters || [];
-            } else if (invocation.apiInvocationInput) {
-              isApi = true;
-              actionGroup = invocation.apiInvocationInput.actionGroup || '';
-              apiPath = invocation.apiInvocationInput.apiPath || '';
-              httpMethod = invocation.apiInvocationInput.httpMethod || 'POST';
-              functionName = apiPath.replace(/^\//, '');
-              const apiParams = invocation.apiInvocationInput.parameters || [];
-              const bodyParams =
-                invocation.apiInvocationInput.requestBody?.content?.[
-                  'application/json'
-                ]?.properties || [];
-              parameters = [...apiParams, ...bodyParams];
-            } else {
-              continue;
-            }
+RUOLO: Project Documentation Lead.
+${fileMetadataInfo}
 
-            console.log(
-              `DOCS: Executing local tool -> ${functionName} with params:`,
-              JSON.stringify(parameters),
-            );
+ANALISI RICEVUTE:
+---
+${techRes}
+---
+${govRes}
+---
 
-            let toolResponse = '';
-            try {
-              if (functionName === 'list_repository_files') {
-                const rawContent = await listRepositoryFiles.callback({
-                  basePath: extractPath,
-                });
-                const lines = rawContent.split('\n');
-                const filtered = lines.filter(
-                  (f) =>
-                    (f.endsWith('.md') ||
-                      f.endsWith('.txt') ||
-                      f.endsWith('.json') ||
-                      f.endsWith('.yaml') ||
-                      f.endsWith('.yml') ||
-                      f.includes('/docs/') ||
-                      f.includes('/doc/')) &&
-                    !f.includes('node_modules') &&
-                    !f.includes('.git') &&
-                    !f.includes('/vendor/') &&
-                    !f.includes('/dist/'),
-                );
-                toolResponse = filtered.slice(0, 1000).join('\n');
-              } else if (functionName === 'read_file_content') {
-                let filePath =
-                  parameters?.find((p: any) => p.name === 'filePath')?.value ||
-                  '';
-                if (!filePath || filePath === '') {
-                  toolResponse = 'Error: Missing filePath parameter.';
-                } else {
-                  if (!filePath.startsWith('/tmp/')) {
-                    const path = require('path');
-                    filePath = path.join(
-                      extractPath,
-                      filePath.replace(/^[/\\]+/, ''),
-                    );
-                    console.log(
-                      `DOCS: Coerced relative filePath to absolute: ${filePath}`,
-                    );
-                  }
-                  const content = await readFileContent.callback({ filePath });
-                  toolResponse = content.substring(0, 24000);
-                }
-              } else {
-                toolResponse = `Error: Unsupported function ${functionName}`;
-              }
-            } catch (err: any) {
-              console.error(`DOCS Tool Error (${functionName}):`, err.message);
-              toolResponse = `Error executing tool: ${err.message}`;
-            }
+COMPITO:
+1. **DETERMINISMO ASSOLUTO SULLE ESISTENZE**: Se un file (README, LICENSE, ecc.) è nella LISTA FILE REALI sopra, devi dichiarare che il file ESISTE. Ignora ogni dubbio degli esperti.
+2. Riorganizza in "## ⚖️ Analisi Standard e UX".
+3. Fornisci "Global Maturity Score" (0-100).
+PRODUCI: Report Finale in Markdown con header "# 📘 Documentation & UX Strategy".`,
+      'DOCS_LEAD',
+    );
 
-            console.log(
-              `DOCS: Tool execution finished. Response length: ${toolResponse.length}`,
-            );
-
-            if (isApi) {
-              returnControlInvocationResults.push({
-                apiResult: {
-                  actionGroup,
-                  apiPath,
-                  httpMethod,
-                  httpStatusCode: 200,
-                  responseBody: {
-                    'application/json': {
-                      body: JSON.stringify({ result: toolResponse }),
-                    },
-                  },
-                },
-              });
-            } else {
-              returnControlInvocationResults.push({
-                functionResult: {
-                  actionGroup,
-                  function: functionName,
-                  responseBody: {
-                    TEXT: { body: toolResponse },
-                  },
-                },
-              });
-            }
-          }
-        }
-      }
-
-      if (
-        returnControlInvocationResults.length > 0 &&
-        returnControlInvocationId
-      ) {
-        command = new InvokeAgentCommand({
-          agentId: AGENT_ID,
-          agentAliasId: AGENT_ALIAS_ID,
-          sessionId,
-          sessionState: {
-            invocationId: returnControlInvocationId,
-            returnControlInvocationResults,
-          },
-        });
-      } else {
-        finalMarkdownReport = streamedText;
-        break;
-      }
-    }
-
-    console.log('DOCS Agent invocation complete.');
-
-    let cleanMarkdown = finalMarkdownReport
-      .replace(/<thinking>.*?<\/thinking>/gs, '')
-      .trim();
-    const startIndex = cleanMarkdown.indexOf('## Riepilogo');
-    if (startIndex !== -1) cleanMarkdown = cleanMarkdown.substring(startIndex);
+    const dynamicSummary =
+      extractFirstMeaningfulLine(finalReport, /[📘⚖️⚠️🔴🟠🟡🎨]/g) ||
+      'Analisi DOCS completata.';
 
     const reportKey = `${s3Prefix}/docs-report.json`;
-    const reportPayload = JSON.stringify({ area: 'DOCS', report: cleanMarkdown });
-    await s3Client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: reportKey,
-        Body: reportPayload,
-        ContentType: 'application/json',
-      }),
-    );
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: reportKey,
+      Body: JSON.stringify({ area: 'DOCS', summary: dynamicSummary, report: finalReport }),
+      ContentType: 'application/json',
+    }));
 
     return { agent: 'docs', status: 'success', reportKey };
   } catch (err: any) {
-    console.error('DOCS CRASH:', err?.message, err?.stack);
-    return {
-      agent: 'docs',
-      status: 'error',
-      error: err?.message ?? 'crash silenzioso',
-    };
+    console.error('DOCS MULTI-AGENT CRASH:', err?.message);
+    return { agent: 'docs', status: 'error', error: err?.message };
   }
 };

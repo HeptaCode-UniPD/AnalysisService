@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { rmSync, existsSync } from 'fs'; // Aggiunti import per la pulizia del disco
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import {
   createManifestBundle,
@@ -35,11 +36,16 @@ const invokeLead = (id: string, prompt: string, name: string) =>
 
 export const owaspAgentHandler = async (event: unknown) => {
   console.log('OWASP ORCHESTRATOR (MARKDOWN v2): START');
+  
+  // Dichiara la variabile fuori dal try in modo che sia accessibile nel finally
+  let extractPath: string | undefined;
+
   try {
     const { s3Bucket: bucket, s3Key: key, s3Prefix } = OwaspAgentEventSchema.parse(event);
 
     console.log('OWASP: downloading and extracting repo...');
-    const extractPath = await unzipRepoToTemp(bucket, key);
+    // Assegna il percorso alla variabile estratta
+    extractPath = await unzipRepoToTemp(bucket, key);
 
     console.log('OWASP: creating thematic bundles...');
     const [manifestBundle, sourceChunks, fullChunks] = await Promise.all([
@@ -180,5 +186,11 @@ PRODUCI: Report Finale in Markdown con header "# 📊 Executive Security Summary
   } catch (err: any) {
     console.error('OWASP v2 CRASH:', err?.message, err?.stack);
     return { agent: 'owasp', status: 'error', error: err?.message };
+  } finally {
+    // Blocco Finally per svuotare sempre la RAM/disco a fine esecuzione o in caso di crash
+    if (extractPath && existsSync(extractPath)) {
+      console.log(`OWASP: Pulizia cartella temporanea ${extractPath}...`);
+      rmSync(extractPath, { recursive: true, force: true });
+    }
   }
 };

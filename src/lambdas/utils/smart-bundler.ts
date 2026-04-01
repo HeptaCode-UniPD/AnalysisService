@@ -86,7 +86,7 @@ export async function createSourceBundle(extractPath: string): Promise<string> {
 export async function createManifestBundle(extractPath: string): Promise<string> {
   const raw = await runRepomix(
     extractPath,
-    '**/package.json,**/package-lock.json,**/composer.json,**/composer.lock,**/requirements.txt,**/requirements*.txt,**/Pipfile,**/Pipfile.lock,**/pom.xml,**/build.gradle,**/build.gradle.kts,**/go.mod,**/go.sum,**/Gemfile,**/Gemfile.lock,**/Cargo.toml,**/Cargo.lock',
+    '**/CMakeLists.txt,**/conanfile.txt,**/vcpkg.json,**/Makefile,**/package.json,**/package-lock.json,**/composer.json,**/composer.lock,**/requirements.txt,**/requirements*.txt,**/Pipfile,**/Pipfile.lock,**/pom.xml,**/build.gradle,**/build.gradle.kts,**/go.mod,**/go.sum,**/Gemfile,**/Gemfile.lock,**/Cargo.toml,**/Cargo.lock',
     '**/node_modules/**,**/vendor/**',
     'manifest',
   );
@@ -122,7 +122,7 @@ export async function createConfigBundle(extractPath: string): Promise<string> {
 export async function createSourceChunks(extractPath: string): Promise<string[]> {
   const raw = await runRepomix(
     extractPath,
-    '**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,cpp,cs,rs,swift,kt}',
+    '**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**',
     'source-chunked',
   );
@@ -161,9 +161,11 @@ export function extractImportedLibraries(sourceChunks: string | string[]): strin
     /^import\s+([\w.]+)/gm,
     /^from\s+([\w.]+)\s+import/gm,
   ];
+  const cppPatterns = [/#include\s*[<"]([^>"\s]+)[>"]/gm];
+
   const javaPatterns = [/^import\s+([\w.]+);/gm];
 
-  for (const pattern of [...jsPatterns, ...phpPatterns, ...pyPatterns, ...javaPatterns]) {
+  for (const pattern of [...jsPatterns, ...phpPatterns, ...pyPatterns, ...javaPatterns, ...cppPatterns]) {
     let match;
     while ((match = pattern.exec(content)) !== null) {
       const lib = match[1].split('/')[0].split('\\')[0];

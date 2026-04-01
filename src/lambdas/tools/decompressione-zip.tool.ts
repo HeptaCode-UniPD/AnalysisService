@@ -56,7 +56,9 @@ export const executeUnzipRepo = async ({
   }
 };
 
+
 export const createUnzipRepoTool = async () => {
+  // @ts-ignore
   const { tool } = await import('@strands-agents/sdk');
   return tool({
     name: 'unzip_repo',

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { rmSync, existsSync } from 'fs';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { createFullChunks } from './utils/smart-bundler';
 import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
@@ -27,11 +28,14 @@ const invokeLead = (id: string, prompt: string, name: string) =>
 
 export const docAgentHandler = async (event: unknown) => {
   console.log('DOCS MULTI-AGENT (v2): START');
+
+  let extractPath: string | undefined;
+
   try {
     const { s3Bucket: bucket, s3Key: key, s3Prefix } = DocAgentEventSchema.parse(event);
 
     console.log('DOCS: extraction and bundling...');
-    const extractPath = await unzipRepoToTemp(bucket, key);
+    extractPath = await unzipRepoToTemp(bucket, key);
     const fullChunks = await createFullChunks(extractPath);
     console.log(`DOCS: ${fullChunks.length} full chunk(s).`);
 
@@ -130,5 +134,10 @@ PRODUCI: Report Finale in Markdown con header "# 📘 Documentation & UX Strateg
   } catch (err: any) {
     console.error('DOCS MULTI-AGENT CRASH:', err?.message);
     return { agent: 'docs', status: 'error', error: err?.message };
+  } finally {
+    if (extractPath && existsSync(extractPath)) {
+      console.log(`DOCS: Pulizia cartella temporanea ${extractPath}...`);
+      rmSync(extractPath, { recursive: true, force: true });
+    }
   }
 };

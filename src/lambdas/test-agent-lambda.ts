@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { rmSync, existsSync } from 'fs';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { createSourceChunks } from './utils/smart-bundler';
 import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
@@ -28,11 +29,14 @@ const invokeLead = (id: string, prompt: string, name: string) =>
 
 export const testAgentHandler = async (event: unknown) => {
   console.log('TEST MULTI-AGENT (v2): START');
+
+  let extractPath: string | undefined;
+
   try {
     const { s3Bucket: bucket, s3Key: key, s3Prefix } = TestAgentEventSchema.parse(event);
 
     console.log('TEST: extraction and bundling...');
-    const extractPath = await unzipRepoToTemp(bucket, key);
+    extractPath = await unzipRepoToTemp(bucket, key);
     const sourceChunks = await createSourceChunks(extractPath);
     console.log(`TEST: ${sourceChunks.length} source chunk(s).`);
 
@@ -169,5 +173,10 @@ PRODUCI: Report Finale in Markdown con header "# 🏆 Quality & Testing Overview
   } catch (err: any) {
     console.error('TEST MULTI-AGENT CRASH:', err?.message);
     return { agent: 'test', status: 'error', error: err?.message };
+  } finally {
+    if (extractPath && existsSync(extractPath)) {
+      console.log(`TEST: Pulizia cartella temporanea ${extractPath}...`);
+      rmSync(extractPath, { recursive: true, force: true });
+    }
   }
 };

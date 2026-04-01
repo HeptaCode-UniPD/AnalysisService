@@ -26,6 +26,20 @@
           "s3Prefix": "{% $s3Prefix %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
       "Assign": {
         "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
         "s3Key": "{% $states.result.Payload.s3Key %}",
@@ -45,6 +59,20 @@
           }
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
       "Assign": {
         "orchestratorPlan": "{% $states.result.Payload %}",
         "agentPayload": {
@@ -69,6 +97,20 @@
                 "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-owaspAgent",
                 "Payload": "{% $agentPayload %}"
               },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException",
+                    "States.TaskFailed"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
               "End": true
             }
           }
@@ -83,6 +125,20 @@
                 "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-testAgent",
                 "Payload": "{% $agentPayload %}"
               },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException",
+                    "States.TaskFailed"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
               "End": true
             }
           }
@@ -117,6 +173,20 @@
                 "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-docsAgent",
                 "Payload": "{% $agentPayload %}"
               },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException",
+                    "States.TaskFailed"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
               "End": true
             }
           }
@@ -141,6 +211,20 @@
           }
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
       "Assign": {
         "finalReport": "{% $states.result.Payload %}"
       },
@@ -156,6 +240,20 @@
           "report": "{% $finalReport %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
       "Next": "Success"
     },
     "Success": {

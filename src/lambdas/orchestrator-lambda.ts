@@ -20,16 +20,26 @@ const streamToString = (stream: any): Promise<string> =>
 export const orchestratorHandler = async (event: any) => {
   const action = event.action;
 
-  // ==========================================
+// ==========================================
   // FASE 1: PIANIFICAZIONE (PLAN)
   // ==========================================
   if (action === 'PLAN') {
     console.log('Orchestratore in fase di PLANNING...');
-    // Per ora abilitiamo tutto (OWASP, TEST, DOCS) in v2
+    
+    // Recuperiamo i metadati generati dallo step precedente (pull-repo)
+    const metadata = event.payload?.repoMetadata;
+    
+    // Attiviamo DOCS solo se c'è almeno un tag di release o un changelog
+    let shouldRunDocs = true;
+    if (metadata) {
+      const hasTags = metadata.tags && metadata.tags.length > 0;
+      shouldRunDocs = hasTags || metadata.hasChangelog;
+    }
+
     return {
       runOwasp: true,
       runTest: true,
-      runDocs: true,
+      runDocs: shouldRunDocs,
     };
   }
 

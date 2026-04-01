@@ -5,7 +5,7 @@ import {
 import { randomUUID } from 'crypto';
 import { sanitizeMarkdown, rawAgentOutput } from './markdown-helper';
 
-const bedrockClient = new BedrockAgentRuntimeClient({ region: 'eu-central-1' });
+const bedrockClient = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
 
 const TOOL_DENIAL_RESPONSE = (functionName: string) =>
   `Tool "${functionName}" is not available in this execution context. ` +

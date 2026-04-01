@@ -1,27 +1,15 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { startStepFunctionExecution } from './adapters/aws-step-functions';
+import { AnalysisRequestDto } from '../common/dto/analysis-request.dto';
 
 @Injectable()
 export class AppService {
-  async triggerAnalysis(payload: any): Promise<string> {
-    if (!payload.repoUrl || !payload.jobId) {
-      throw new BadRequestException('repoUrl e jobId sono obbligatori');
-    }
-
+  async triggerAnalysis(payload: AnalysisRequestDto): Promise<string> {
     console.log(
-      'Validazione superata. Avvio reale Step Function per repo:',
+      'Validazione superata automaticamente. Avvio reale Step Function per repo:',
       payload.repoUrl,
     );
 
-    try {
-      // Chiama la funzione che utilizza l'SDK AWS @aws-sdk/client-sfn
-      const executionArn = await startStepFunctionExecution(payload);
-      return executionArn;
-    } catch (error: any) {
-      console.error('Errore avvio Step Function:', error);
-      throw new Error(
-        'Impossibile contattare AWS Step Functions in questo ambiente.',
-      );
-    }
+    return await startStepFunctionExecution(payload);
   }
 }

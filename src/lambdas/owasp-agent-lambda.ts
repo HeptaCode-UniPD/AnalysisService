@@ -8,7 +8,10 @@ import {
   createFullChunks,
   extractImportedLibraries,
 } from './utils/smart-bundler';
-import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
+import {
+  invokeSubAgent,
+  extractFirstMeaningfulLine,
+} from './utils/agent-invoker';
 
 const s3Client = new S3Client({});
 
@@ -18,11 +21,11 @@ const OwaspAgentEventSchema = z.object({
   s3Prefix: z.string(),
 });
 
-const AGENT_DEP_ID   = process.env.OWASP_DEP_AGENT_ID   || 'KUE8YYMLKK';
-const AGENT_CREDS_ID = process.env.OWASP_CREDS_AGENT_ID  || 'QDRECNXUGR';
-const AGENT_CORE_ID  = process.env.OWASP_CORE_AGENT_ID   || 'FJPDLGYFQM';
-const AGENT_LEAD_ID  = process.env.OWASP_LEAD_AGENT_ID   || 'PILT1S5IL6';
-const ALIAS          = process.env.OWASP_AGENT_ALIAS_ID  || 'TSTALIASID';
+const AGENT_DEP_ID = process.env.OWASP_DEP_AGENT_ID || 'KUE8YYMLKK';
+const AGENT_CREDS_ID = process.env.OWASP_CREDS_AGENT_ID || 'QDRECNXUGR';
+const AGENT_CORE_ID = process.env.OWASP_CORE_AGENT_ID || 'FJPDLGYFQM';
+const AGENT_LEAD_ID = process.env.OWASP_LEAD_AGENT_ID || 'PILT1S5IL6';
+const ALIAS = process.env.OWASP_AGENT_ALIAS_ID || 'TSTALIASID';
 
 const NO_TOOLS = `⚠️ REGOLA FERREA: NON USARE TOOL. Hai già tutto il contesto nel testo sotto. Produci solo il report Markdown richiesto.`;
 
@@ -36,12 +39,16 @@ const invokeLead = (id: string, prompt: string, name: string) =>
 
 export const owaspAgentHandler = async (event: unknown) => {
   console.log('OWASP ORCHESTRATOR (MARKDOWN v2): START');
-  
+
   // Dichiara la variabile fuori dal try in modo che sia accessibile nel finally
   let extractPath: string | undefined;
 
   try {
-    const { s3Bucket: bucket, s3Key: key, s3Prefix } = OwaspAgentEventSchema.parse(event);
+    const {
+      s3Bucket: bucket,
+      s3Key: key,
+      s3Prefix,
+    } = OwaspAgentEventSchema.parse(event);
 
     console.log('OWASP: downloading and extracting repo...');
     // Assegna il percorso alla variabile estratta
@@ -55,7 +62,9 @@ export const owaspAgentHandler = async (event: unknown) => {
     ]);
 
     const rawImports = extractImportedLibraries(sourceChunks);
-    console.log(`OWASP: ${sourceChunks.length} source chunk(s), ${fullChunks.length} full chunk(s), ${rawImports.length} imports.`);
+    console.log(
+      `OWASP: ${sourceChunks.length} source chunk(s), ${fullChunks.length} full chunk(s), ${rawImports.length} imports.`,
+    );
 
     // ── 1. Dependency (manifest piccolo → chiamata singola) ──
     const depResPromise = invokeSpec(
@@ -79,10 +88,13 @@ PRODUCI: Report in Markdown con titolo "## 📦 Verifica Dipendenze".`,
     const credsResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
-        console.log(`OWASP: Credentials scan chunk ${i + 1}/${fullChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_CREDS_ID,
-          `${NO_TOOLS}
+        console.log(
+          `OWASP: Credentials scan chunk ${i + 1}/${fullChunks.length}...`,
+        );
+        parts.push(
+          await invokeSpec(
+            AGENT_CREDS_ID,
+            `${NO_TOOLS}
 
 RUOLO: Specialista Cybersecurity. Cerca credenziali hardcoded.
 Chunk ${i + 1} di ${fullChunks.length} del bundle completo.
@@ -96,8 +108,9 @@ COMPITO:
 3. Se non trovi nulla, scrivi 'Nessun segreto rilevato in questo chunk'.
 4. Fornisci un Maturity Score (0-100) basato solo su questo chunk.
 PRODUCI: Report tecnico in Markdown con titolo "## 🔑 Scansione Credenziali (chunk ${i + 1}/${fullChunks.length})".`,
-          `CREDENTIALS_${i + 1}`,
-        ));
+            `CREDENTIALS_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
@@ -106,10 +119,13 @@ PRODUCI: Report tecnico in Markdown con titolo "## 🔑 Scansione Credenziali (c
     const coreResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < sourceChunks.length; i++) {
-        console.log(`OWASP: Top10 scan chunk ${i + 1}/${sourceChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_CORE_ID,
-          `${NO_TOOLS}
+        console.log(
+          `OWASP: Top10 scan chunk ${i + 1}/${sourceChunks.length}...`,
+        );
+        parts.push(
+          await invokeSpec(
+            AGENT_CORE_ID,
+            `${NO_TOOLS}
 
 RUOLO: Auditor OWASP. Analizza vulnerabilità logiche (Top 10).
 Chunk ${i + 1} di ${sourceChunks.length} del codice sorgente.
@@ -123,8 +139,9 @@ COMPITO:
 3. Se non trovi nulla, scrivi 'Nessuna vulnerabilità OWASP rilevata in questo chunk'.
 4. Fornisci un Maturity Score (0-100) basato solo su questo chunk.
 PRODUCI: Report tecnico in Markdown con titolo "## 🛡️ Vulnerabilità OWASP Top 10 (chunk ${i + 1}/${sourceChunks.length})".`,
-          `OWASP_CORE_${i + 1}`,
-        ));
+            `OWASP_CORE_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
@@ -135,7 +152,9 @@ PRODUCI: Report tecnico in Markdown con titolo "## 🛡️ Vulnerabilità OWASP 
       coreResPromise,
     ]);
 
-    console.log('OWASP: specialized analysis complete. Starting Domain Lead aggregation...');
+    console.log(
+      'OWASP: specialized analysis complete. Starting Domain Lead aggregation...',
+    );
 
     const finalReport = await invokeLead(
       AGENT_LEAD_ID,
@@ -175,12 +194,18 @@ PRODUCI: Report Finale in Markdown con header "# 📊 Executive Security Summary
       'Analisi OWASP completata.';
 
     const reportKey = `${s3Prefix}/owasp-report.json`;
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: reportKey,
-      Body: JSON.stringify({ area: 'OWASP', summary: dynamicSummary, report: finalReport }),
-      ContentType: 'application/json',
-    }));
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: reportKey,
+        Body: JSON.stringify({
+          area: 'OWASP',
+          summary: dynamicSummary,
+          report: finalReport,
+        }),
+        ContentType: 'application/json',
+      }),
+    );
 
     return { agent: 'owasp', status: 'success', reportKey };
   } catch (err: any) {

@@ -6,166 +6,117 @@
     "Initialize": {
       "Type": "Pass",
       "Assign": {
-        "jobId": "{% $states.input.jobId %}",
+        "jobId": "{% $states.context.Execution.Name %}",
         "repoUrl": "{% $states.input.repoUrl %}",
-        "commitSha": "{% $states.input.commitSha %}",
-        "webhookUrl": "{% $states.input.webhookUrl %}",
-        "s3Prefix": "{% 'repos/' & $states.input.jobId & '/' & $states.input.commitSha %}"
+        "s3Prefix": "{% 'repos/' & $states.context.Execution.Name %}"
       },
-      "Next": "Pull Repo to S3"
+      "Next": "MainAnalysisProcess"
     },
-    "Pull Repo to S3": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Arguments": {
-        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-pullRepoToS3",
-        "Payload": {
-          "jobId": "{% $jobId %}",
-          "repoUrl": "{% $repoUrl %}",
-          "commitSha": "{% $commitSha %}",
-          "s3Prefix": "{% $s3Prefix %}"
-        }
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException",
-            "States.TaskFailed"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2.0
-        }
-      ],
-      "Assign": {
-        "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
-        "s3Key": "{% $states.result.Payload.s3Key %}",
-        "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
-      },
-      "Next": "Orchestrator Planning"
-    },
-    "Orchestrator Planning": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Arguments": {
-        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
-        "Payload": {
-          "action": "PLAN",
-          "payload": {
-            "repoMetadata": "{% $repoMetadata %}"
-          }
-        }
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException",
-            "States.TaskFailed"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2.0
-        }
-      ],
-      "Assign": {
-        "orchestratorPlan": "{% $states.result.Payload %}",
-        "agentPayload": {
-          "s3Bucket": "{% $s3Bucket %}",
-          "s3Key": "{% $s3Key %}",
-          "s3Prefix": "{% $s3Prefix %}",
-          "jobId": "{% $jobId %}"
-        }
-      },
-      "Next": "Parallel AI Analysis"
-    },
-    "Parallel AI Analysis": {
+
+    "MainAnalysisProcess": {
       "Type": "Parallel",
       "Branches": [
         {
-          "StartAt": "Run OWASP Agent",
+          "StartAt": "Pull Repo to S3",
           "States": {
-            "Run OWASP Agent": {
+            "Pull Repo to S3": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
               "Arguments": {
-                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-owaspAgent",
-                "Payload": "{% $agentPayload %}"
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-pullRepoToS3",
+                "Payload": {
+                  "jobId": "{% $jobId %}",
+                  "repoUrl": "{% $repoUrl %}",
+                  "s3Prefix": "{% $s3Prefix %}"
+                }
               },
               "Retry": [
                 {
                   "ErrorEquals": [
-                    "Lambda.ServiceException",
-                    "Lambda.AWSLambdaException",
-                    "Lambda.SdkClientException",
                     "Lambda.TooManyRequestsException",
                     "States.TaskFailed"
                   ],
                   "IntervalSeconds": 2,
-                  "MaxAttempts": 3,
-                  "BackoffRate": 2.0
+                  "MaxAttempts": 3
                 }
               ],
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "Run Test Agent",
-          "States": {
-            "Run Test Agent": {
+              "Assign": {
+                "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
+                "s3Key": "{% $states.result.Payload.s3Key %}",
+                "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
+              },
+              "Next": "Orchestrator Planning"
+            },
+
+            "Orchestrator Planning": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
               "Arguments": {
-                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-testAgent",
-                "Payload": "{% $agentPayload %}"
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
+                "Payload": {
+                  "action": "PLAN",
+                  "payload": { "repoMetadata": "{% $repoMetadata %}" }
+                }
               },
-              "Retry": [
+              "Assign": {
+                "orchestratorPlan": "{% $states.result.Payload %}",
+                "agentPayload": {
+                  "s3Bucket": "{% $s3Bucket %}",
+                  "s3Key": "{% $s3Key %}",
+                  "s3Prefix": "{% $s3Prefix %}",
+                  "jobId": "{% $jobId %}"
+                }
+              },
+              "Next": "Parallel AI Analysis"
+            },
+
+            "Parallel AI Analysis": {
+              "Type": "Parallel",
+              "Branches": [
                 {
-                  "ErrorEquals": [
-                    "Lambda.ServiceException",
-                    "Lambda.AWSLambdaException",
-                    "Lambda.SdkClientException",
-                    "Lambda.TooManyRequestsException",
-                    "States.TaskFailed"
-                  ],
-                  "IntervalSeconds": 2,
-                  "MaxAttempts": 3,
-                  "BackoffRate": 2.0
+                  "StartAt": "Run OWASP Agent",
+                  "States": {
+                    "Run OWASP Agent": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::lambda:invoke",
+                      "Arguments": {
+                        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-owaspAgent",
+                        "Payload": "{% $agentPayload %}"
+                      },
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "Run Test Agent",
+                  "States": {
+                    "Run Test Agent": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::lambda:invoke",
+                      "Arguments": {
+                        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-testAgent",
+                        "Payload": "{% $agentPayload %}"
+                      },
+                      "End": true
+                    }
+                  }
                 }
               ],
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "Check Run Docs",
-          "States": {
-            "Check Run Docs": {
+              "Assign": { "parallelResults": "{% $states.result %}" },
+              "Next": "Should Run Docs?"
+            },
+
+            "Should Run Docs?": {
               "Type": "Choice",
               "Choices": [
                 {
-                  "Condition": "{% $orchestratorPlan.runDocs %}",
+                  "Condition": "{% $orchestratorPlan.runDocs = true %}",
                   "Next": "Run Docs Agent"
                 }
               ],
-              "Default": "Skip Docs Agent"
+              "Default": "Orchestrator Aggregation"
             },
-            "Skip Docs Agent": {
-              "Type": "Pass",
-              "Output": {
-                "Payload": {
-                  "agent": "docs",
-                  "status": "skipped"
-                }
-              },
-              "End": true
-            },
+
             "Run Docs Agent": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
@@ -173,91 +124,73 @@
                 "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-docsAgent",
                 "Payload": "{% $agentPayload %}"
               },
-              "Retry": [
-                {
-                  "ErrorEquals": [
-                    "Lambda.ServiceException",
-                    "Lambda.AWSLambdaException",
-                    "Lambda.SdkClientException",
-                    "Lambda.TooManyRequestsException",
-                    "States.TaskFailed"
-                  ],
-                  "IntervalSeconds": 2,
-                  "MaxAttempts": 3,
-                  "BackoffRate": 2.0
+              "Assign": {
+                "parallelResults": "{% $states.result.Payload != null ? $append($parallelResults, [$states.result]) : $parallelResults %}"
+              },
+              "Next": "Orchestrator Aggregation"
+            },
+
+            "Orchestrator Aggregation": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Arguments": {
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
+                "Payload": {
+                  "action": "AGGREGATE",
+                  "payload": {
+                    "jobId": "{% $jobId %}",
+                    "s3Bucket": "{% $s3Bucket %}",
+                    "reports": "{% $parallelResults[].Payload %}"
+                  }
                 }
-              ],
+              },
+              "Assign": { "finalReport": "{% $states.result.Payload %}" },
+              "Next": "Notify Webhook"
+            },
+
+            "Notify Webhook": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Arguments": {
+                "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-webhookSender",
+                "Payload": {
+                  "report": "{% $finalReport %}",
+                  "jobId": "{% $jobId %}"
+                }
+              },
               "End": true
             }
           }
         }
       ],
-      "Assign": {
-        "parallelResults": "{% $states.result %}"
-      },
-      "Next": "Orchestrator Aggregation"
-    },
-    "Orchestrator Aggregation": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Arguments": {
-        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-orchestrator",
-        "Payload": {
-          "action": "AGGREGATE",
-          "payload": {
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Handle Failure",
+          "Output": {
             "jobId": "{% $jobId %}",
-            "s3Bucket": "{% $s3Bucket %}",
-            "reports": "{% $parallelResults[].Payload %}"
+            "errorInfo": "{% $states.errorOutput %}"
           }
-        }
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException",
-            "States.TaskFailed"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2.0
-        }
-      ],
-      "Assign": {
-        "finalReport": "{% $states.result.Payload %}"
-      },
-      "Next": "Notify Webhook"
-    },
-    "Notify Webhook": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Arguments": {
-        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-webhookSender",
-        "Payload": {
-          "webhookUrl": "{% $webhookUrl %}",
-          "report": "{% $finalReport %}"
-        }
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException",
-            "States.TaskFailed"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2.0
         }
       ],
       "Next": "Success"
     },
-    "Success": {
-      "Type": "Succeed"
-    }
+
+    "Handle Failure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-failureHandler",
+        "Payload": "{% $states.input %}"
+      },
+      "Next": "Fail Execution"
+    },
+
+    "Fail Execution": {
+      "Type": "Fail",
+      "Error": "AnalysisFailed",
+      "Cause": "L'analisi è terminata con un errore."
+    },
+    "Success": { "Type": "Succeed" }
   }
 }

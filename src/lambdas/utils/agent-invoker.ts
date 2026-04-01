@@ -5,7 +5,9 @@ import {
 import { randomUUID } from 'crypto';
 import { sanitizeMarkdown, rawAgentOutput } from './markdown-helper';
 
-const bedrockClient = new BedrockAgentRuntimeClient({ region: process.env.AWS_REGION });
+const bedrockClient = new BedrockAgentRuntimeClient({
+  region: process.env.AWS_REGION,
+});
 
 const TOOL_DENIAL_RESPONSE = (functionName: string) =>
   `Tool "${functionName}" is not available in this execution context. ` +
@@ -59,7 +61,9 @@ export async function invokeSubAgent(
       const response = await bedrockClient.send(command);
 
       if (!response.completion) {
-        console.warn(`[${agentName}] response.completion undefined al loop ${loopCount}`);
+        console.warn(
+          `[${agentName}] response.completion undefined al loop ${loopCount}`,
+        );
         break;
       }
 
@@ -71,32 +75,43 @@ export async function invokeSubAgent(
           invocationId = event.returnControl.invocationId;
 
           for (const inv of event.returnControl.invocationInputs || []) {
-            const isFn  = !!inv.functionInvocationInput;
+            const isFn = !!inv.functionInvocationInput;
             const isApi = !!inv.apiInvocationInput;
 
-            const actionGroup  = isFn ? inv.functionInvocationInput!.actionGroup  : inv.apiInvocationInput!.actionGroup;
-            const functionName = isFn ? inv.functionInvocationInput!.function     : inv.apiInvocationInput!.apiPath?.replace(/^\//, '') || 'unknown';
+            const actionGroup = isFn
+              ? inv.functionInvocationInput!.actionGroup
+              : inv.apiInvocationInput!.actionGroup;
+            const functionName = isFn
+              ? inv.functionInvocationInput!.function
+              : inv.apiInvocationInput!.apiPath?.replace(/^\//, '') ||
+                'unknown';
 
-            console.warn(`[${agentName}] Tool use intercettato: ${functionName} — rispondo con diniego.`);
+            console.warn(
+              `[${agentName}] Tool use intercettato: ${functionName} — rispondo con diniego.`,
+            );
 
             if (isFn) {
               returnControlResults.push({
                 functionResult: {
                   actionGroup,
                   function: functionName,
-                  responseBody: { TEXT: { body: TOOL_DENIAL_RESPONSE(functionName!) } },
+                  responseBody: {
+                    TEXT: { body: TOOL_DENIAL_RESPONSE(functionName!) },
+                  },
                 },
               });
             } else {
               returnControlResults.push({
                 apiResult: {
                   actionGroup,
-                  apiPath:        inv.apiInvocationInput!.apiPath!,
-                  httpMethod:     inv.apiInvocationInput!.httpMethod || 'POST',
+                  apiPath: inv.apiInvocationInput!.apiPath!,
+                  httpMethod: inv.apiInvocationInput!.httpMethod || 'POST',
                   httpStatusCode: 403,
                   responseBody: {
                     'application/json': {
-                      body: JSON.stringify({ error: TOOL_DENIAL_RESPONSE(functionName!) }),
+                      body: JSON.stringify({
+                        error: TOOL_DENIAL_RESPONSE(functionName!),
+                      }),
                     },
                   },
                 },
@@ -107,15 +122,21 @@ export async function invokeSubAgent(
       }
 
       if (!returnControlDetected) {
-        console.log(`[${agentName}] Invocazione completata (loop ${loopCount}).`);
+        console.log(
+          `[${agentName}] Invocazione completata (loop ${loopCount}).`,
+        );
         // Lead → sanitize completo; sotto-agenti → solo trim, nessun taglio
         return isLead ? sanitizeMarkdown(fullText) : rawAgentOutput(fullText);
       }
 
-      console.log(`[${agentName}] returnControl gestito, continuo al loop ${loopCount + 1}...`);
-
+      console.log(
+        `[${agentName}] returnControl gestito, continuo al loop ${loopCount + 1}...`,
+      );
     } catch (err: any) {
-      console.error(`[${agentName}] Errore Bedrock al loop ${loopCount}:`, err?.message);
+      console.error(
+        `[${agentName}] Errore Bedrock al loop ${loopCount}:`,
+        err?.message,
+      );
       return `## Errore analisi ${agentName}\n\nImpossibile completare: ${err?.message}`;
     }
   }
@@ -127,12 +148,27 @@ export async function invokeSubAgent(
 /**
  * Estrae la prima riga significativa di un report Markdown per il summary dinamico.
  */
-export function extractFirstMeaningfulLine(report: string, emojiPattern: RegExp): string {
-  const lines = report.split('\n').map((l) => l.trim()).filter(Boolean);
+export function extractFirstMeaningfulLine(
+  report: string,
+  emojiPattern: RegExp,
+): string {
+  const lines = report
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
   for (const line of lines) {
-    if (line.startsWith('#') || line.startsWith('---') || line.startsWith('===')) continue;
+    if (
+      line.startsWith('#') ||
+      line.startsWith('---') ||
+      line.startsWith('===')
+    )
+      continue;
     if (line.length < 20) continue;
-    return line.replace(/\*\*/g, '').replace(emojiPattern, '').trim().substring(0, 200);
+    return line
+      .replace(/\*\*/g, '')
+      .replace(emojiPattern, '')
+      .trim()
+      .substring(0, 200);
   }
   return '';
 }

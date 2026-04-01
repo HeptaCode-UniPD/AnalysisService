@@ -1,22 +1,40 @@
-// aws-step-functions.ts
 import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
+import { InternalServerErrorException } from '@nestjs/common';
 
-const client = new SFNClient({
-  region: process.env.AWS_REGION ?? 'eu-central-1',
+// Inizializza il client fuori dalla funzione per sfruttare il riutilizzo (caching) nelle Lambda
+const sfnClient = new SFNClient({
+  region: process.env.AWS_REGION || 'eu-west-1',
 });
 
-export async function startStepFunctionExecution(input: {
-  jobId: string;
-  repoUrl: string;
-  commitSha: string;
-  webhookUrl: string;
-}): Promise<string> {
-  const command = new StartExecutionCommand({
-    stateMachineArn: process.env.STATE_MACHINE_ARN,
-    name: input.jobId,
-    input: JSON.stringify(input),
-  });
+export const startStepFunctionExecution = async (
+  payload: any,
+): Promise<string> => {
+  const stateMachineArn = process.env.STATE_MACHINE_ARN;
 
-  const response = await client.send(command);
-  return response.executionArn!;
-}
+  if (!stateMachineArn) {
+    throw new InternalServerErrorException(
+      'Configurazione mancante: STATE_MACHINE_ARN non definito.',
+    );
+  }
+
+  try {
+    const command = new StartExecutionCommand({
+      stateMachineArn,
+      input: JSON.stringify(payload),
+    });
+
+    const response = await sfnClient.send(command);
+
+    if (!response.executionArn) {
+      throw new Error('ARN non restituito da AWS.');
+    }
+
+    return response.executionArn;
+  } catch (error) {
+    console.error('Errore di comunicazione con AWS Step Functions:', error);
+    // Lanciamo un'eccezione HTTP di NestJS per una risposta pulita al client
+    throw new InternalServerErrorException(
+      "Impossibile avviare l'analisi su AWS.",
+    );
+  }
+};

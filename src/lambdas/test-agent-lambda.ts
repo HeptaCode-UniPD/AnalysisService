@@ -3,7 +3,10 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { rmSync, existsSync } from 'fs';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { createSourceChunks } from './utils/smart-bundler';
-import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
+import {
+  invokeSubAgent,
+  extractFirstMeaningfulLine,
+} from './utils/agent-invoker';
 
 const s3Client = new S3Client({});
 
@@ -13,11 +16,11 @@ const TestAgentEventSchema = z.object({
   s3Prefix: z.string(),
 });
 
-const AGENT_QA_ID    = process.env.TEST_QA_AGENT_ID    || 'EXDHLR6GUP';
-const AGENT_GEN_ID   = process.env.TEST_GEN_AGENT_ID   || '3IIAWFA9BC';
+const AGENT_QA_ID = process.env.TEST_QA_AGENT_ID || 'EXDHLR6GUP';
+const AGENT_GEN_ID = process.env.TEST_GEN_AGENT_ID || '3IIAWFA9BC';
 const AGENT_AUDIT_ID = process.env.TEST_AUDIT_AGENT_ID || 'BNBKYAFDME';
-const AGENT_LEAD_ID  = process.env.TEST_AGENT_ID        || 'L3EB5WS1ZU';
-const ALIAS          = process.env.TEST_AGENT_ALIAS_ID  || 'TSTALIASID';
+const AGENT_LEAD_ID = process.env.TEST_AGENT_ID || 'L3EB5WS1ZU';
+const ALIAS = process.env.TEST_AGENT_ALIAS_ID || 'TSTALIASID';
 
 const NO_TOOLS = `⚠️ REGOLA FERREA: NON USARE TOOL. Hai già tutto il contesto nel testo sotto. Produci solo il report Markdown richiesto.`;
 
@@ -33,7 +36,11 @@ export const testAgentHandler = async (event: unknown) => {
   let extractPath: string | undefined;
 
   try {
-    const { s3Bucket: bucket, s3Key: key, s3Prefix } = TestAgentEventSchema.parse(event);
+    const {
+      s3Bucket: bucket,
+      s3Key: key,
+      s3Prefix,
+    } = TestAgentEventSchema.parse(event);
 
     console.log('TEST: extraction and bundling...');
     extractPath = await unzipRepoToTemp(bucket, key);
@@ -50,9 +57,10 @@ export const testAgentHandler = async (event: unknown) => {
       const parts: string[] = [];
       for (let i = 0; i < sourceChunks.length; i++) {
         console.log(`TEST: QA scan chunk ${i + 1}/${sourceChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_QA_ID,
-          `${NO_TOOLS}
+        parts.push(
+          await invokeSpec(
+            AGENT_QA_ID,
+            `${NO_TOOLS}
 
 RUOLO: QA Lead Engineer. Analizza la robustezza dei test esistenti.
 Chunk ${i + 1} di ${sourceChunks.length} del codice sorgente.
@@ -66,8 +74,9 @@ COMPITO:
 3. Se non trovi nulla, scrivi 'Nessun file di test rilevato in questo chunk'. NON trarre conclusioni globali.
 4. Fornisci un Maturity Score (0-100) basandosi su ciò che vedi qui.
 PRODUCI: Report tecnico in Markdown con titolo "## 🧪 Analisi QA e Copertura (chunk ${i + 1}/${sourceChunks.length})".`,
-          `QA_EXPERT_${i + 1}`,
-        ));
+            `QA_EXPERT_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
@@ -92,10 +101,13 @@ PRODUCI: Report in Markdown con titolo "## 🛠️ Generatore di Test e Boilerpl
     const auditResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < sourceChunks.length; i++) {
-        console.log(`TEST: Code quality audit chunk ${i + 1}/${sourceChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_AUDIT_ID,
-          `${NO_TOOLS}
+        console.log(
+          `TEST: Code quality audit chunk ${i + 1}/${sourceChunks.length}...`,
+        );
+        parts.push(
+          await invokeSpec(
+            AGENT_AUDIT_ID,
+            `${NO_TOOLS}
 
 RUOLO: Senior Software Auditor. Analizza la pulizia del codice.
 Chunk ${i + 1} di ${sourceChunks.length} del codice sorgente.
@@ -109,8 +121,9 @@ COMPITO:
 3. Se non trovi problemi, scrivi 'Nessuna criticità qualitativa rilevata in questo chunk'.
 4. Fornisci un Maturity Score (0-100) basandosi su ciò che vedi qui.
 PRODUCI: Report tecnico in Markdown con titolo "## 🔍 Audit Qualità del Codice (chunk ${i + 1}/${sourceChunks.length})".`,
-          `CODE_AUDITOR_${i + 1}`,
-        ));
+            `CODE_AUDITOR_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
@@ -121,7 +134,9 @@ PRODUCI: Report tecnico in Markdown con titolo "## 🔍 Audit Qualità del Codic
       auditResPromise,
     ]);
 
-    console.log('TEST: specialized analysis complete. Starting Domain Lead aggregation...');
+    console.log(
+      'TEST: specialized analysis complete. Starting Domain Lead aggregation...',
+    );
 
     const finalReport = await invokeLead(
       AGENT_LEAD_ID,
@@ -162,12 +177,18 @@ PRODUCI: Report Finale in Markdown con header "# 🏆 Quality & Testing Overview
       'Analisi TEST completata.';
 
     const reportKey = `${s3Prefix}/test-report.json`;
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: reportKey,
-      Body: JSON.stringify({ area: 'TEST', summary: dynamicSummary, report: finalReport }),
-      ContentType: 'application/json',
-    }));
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: reportKey,
+        Body: JSON.stringify({
+          area: 'TEST',
+          summary: dynamicSummary,
+          report: finalReport,
+        }),
+        ContentType: 'application/json',
+      }),
+    );
 
     return { agent: 'test', status: 'success', reportKey };
   } catch (err: any) {

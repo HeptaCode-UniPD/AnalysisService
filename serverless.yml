@@ -5,6 +5,8 @@ provider:
   runtime: nodejs20.x
   region: eu-central-1
   memorySize: 512
+  environment:
+    API_KEY: ${ssm:/ms2/condivisa/api-key}
   iamRoleStatements:
     # Permesso per scrivere, leggere e CANCELLARE su S3
     - Effect: Allow
@@ -62,7 +64,7 @@ package:
 
 functions:
   wrapperAdapter:
-    handler: src/wrapper/handler.startAnalysis
+    handler: dist/wrapper/handler.startAnalysis
     timeout: 29
     memorySize: 1024
     environment:
@@ -74,7 +76,7 @@ functions:
           cors: true
 
   pullRepoToS3:
-    handler: src/lambdas/pull-repo.handler
+    handler: dist/lambdas/pull-repo.handler
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
@@ -84,11 +86,14 @@ functions:
       - arn:aws:lambda:eu-central-1:553035198032:layer:git-lambda2:8
 
   webhookSender:
-    handler: src/lambdas/webhook.handler
+    handler: dist/lambdas/webhook.handler
+    environment:
+      DESTINATION_API_KEY: ${ssm:/amerigo/risposta/api-key}
+      DESTINATION_URL: ${ssm:/amerigo/url}
     timeout: 15
 
   orchestrator:
-    handler: src/lambdas/orchestrator-lambda.orchestratorHandler
+    handler: dist/lambdas/orchestrator-lambda.orchestratorHandler
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
@@ -96,48 +101,56 @@ functions:
       LAMBDA_OWASP_NAME: ms2-analysis-service-${sls:stage}-owaspAgent
       LAMBDA_TEST_NAME: ms2-analysis-service-${sls:stage}-testAgent
       LAMBDA_DOCS_NAME: ms2-analysis-service-${sls:stage}-docsAgent
-      MASTER_LEAD_AGENT_ID: "A8A2WWKF9S"
+      MASTER_LEAD_AGENT_ID: 'A8A2WWKF9S'
 
   owaspAgent:
-    handler: src/lambdas/owasp-agent-lambda.owaspAgentHandler
+    handler: dist/lambdas/owasp-agent-lambda.owaspAgentHandler
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
     environment:
-      OWASP_DEP_AGENT_ID: "KUE8YYMLKK"     
-      OWASP_CREDS_AGENT_ID: "QDRECNXUGR"   
-      OWASP_CORE_AGENT_ID: "FJPDLGYFQM"    
-      OWASP_LEAD_AGENT_ID: "PILT1S5IL6"    
-      TEST_QA_AGENT_ID: "EXDHLR6GUP"       
-      TEST_GEN_AGENT_ID: "3IIAWFA9BC"      
-      TEST_AUDIT_AGENT_ID: "BNBKYAFDME"    
-      TEST_AGENT_ID: "L3EB5WS1ZU"          
-      DOCS_TECH_AGENT_ID: "ZPFNNQK2FO"     
-      DOCS_GOV_AGENT_ID: "UVFEQBJS1T"      
-      DOCS_AGENT_ID: "DB16ZAYK3A"          
+      OWASP_DEP_AGENT_ID: 'KUE8YYMLKK'
+      OWASP_CREDS_AGENT_ID: 'QDRECNXUGR'
+      OWASP_CORE_AGENT_ID: 'FJPDLGYFQM'
+      OWASP_LEAD_AGENT_ID: 'PILT1S5IL6'
+      TEST_QA_AGENT_ID: 'EXDHLR6GUP'
+      TEST_GEN_AGENT_ID: '3IIAWFA9BC'
+      TEST_AUDIT_AGENT_ID: 'BNBKYAFDME'
+      TEST_AGENT_ID: 'L3EB5WS1ZU'
+      DOCS_TECH_AGENT_ID: 'ZPFNNQK2FO'
+      DOCS_GOV_AGENT_ID: 'UVFEQBJS1T'
+      DOCS_AGENT_ID: 'DB16ZAYK3A'
       OWASP_AGENT_ALIAS_ID: TSTALIASID
 
   testAgent:
-    handler: src/lambdas/test-agent-lambda.testAgentHandler
+    handler: dist/lambdas/test-agent-lambda.testAgentHandler
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
     environment:
-      TEST_QA_AGENT_ID: L3EB5WS1ZU      
+      TEST_QA_AGENT_ID: L3EB5WS1ZU
       TEST_GEN_AGENT_ID: L3EB5WS1ZU
       TEST_AUDIT_AGENT_ID: L3EB5WS1ZU
       TEST_AGENT_ALIAS_ID: TSTALIASID
 
   docsAgent:
-    handler: src/lambdas/docs-agent-lambda.docAgentHandler
+    handler: dist/lambdas/docs-agent-lambda.docAgentHandler
     timeout: 900
     memorySize: 8192
     ephemeralStorageSize: 8192
     environment:
-      DOCS_TECH_AGENT_ID: DB16ZAYK3A    
+      DOCS_TECH_AGENT_ID: DB16ZAYK3A
       DOCS_GOV_AGENT_ID: DB16ZAYK3A
       DOCS_UX_AGENT_ID: DB16ZAYK3A
       DOCS_AGENT_ALIAS_ID: TSTALIASID
+
+  failureHandler:
+    handler: dist/lambdas/failure-handler.handler
+    timeout: 20
+    memorySize: 256
+    environment:
+      DESTINATION_URL: ${ssm:/amerigo/url}
+      DESTINATION_API_KEY: ${ssm:/amerigo/risposta/api-key}
 
 # Definizione della Step Function
 stepFunctions:

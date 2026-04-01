@@ -1,13 +1,21 @@
+// Modifica suggerita per src/lambdas/webhook.ts
 export const handler = async (event: any) => {
-  const { webhookUrl, report } = event;
+  const { report } = event;
+  const apiKey = process.env.DESTINATION_API_KEY;
+  const webhookUrl = process.env.DESTINATION_URL;
 
-  console.log(`Invio report al webhook: ${webhookUrl}`);
+  if (!apiKey || !webhookUrl) {
+    throw new Error(
+      'Configurazione mancante: DESTINATION_API_KEY non definita.',
+    );
+  }
 
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': apiKey,
       },
       body: JSON.stringify(report),
     });

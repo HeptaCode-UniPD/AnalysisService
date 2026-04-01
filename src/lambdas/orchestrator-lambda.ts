@@ -3,11 +3,14 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
-import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
+import {
+  invokeSubAgent,
+  extractFirstMeaningfulLine,
+} from './utils/agent-invoker';
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION });
 const MASTER_LEAD_ID = process.env.MASTER_LEAD_AGENT_ID || 'UNSET';
-const ALIAS          = process.env.OWASP_AGENT_ALIAS_ID || 'TSTALIASID';
+const ALIAS = process.env.OWASP_AGENT_ALIAS_ID || 'TSTALIASID';
 
 const streamToString = (stream: any): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -20,15 +23,15 @@ const streamToString = (stream: any): Promise<string> =>
 export const orchestratorHandler = async (event: any) => {
   const action = event.action;
 
-// ==========================================
+  // ==========================================
   // FASE 1: PIANIFICAZIONE (PLAN)
   // ==========================================
   if (action === 'PLAN') {
     console.log('Orchestratore in fase di PLANNING...');
-    
+
     // Recuperiamo i metadati generati dallo step precedente (pull-repo)
     const metadata = event.payload?.repoMetadata;
-    
+
     // Attiviamo DOCS solo se c'è almeno un tag di release o un changelog
     let shouldRunDocs = true;
     if (metadata) {
@@ -50,7 +53,7 @@ export const orchestratorHandler = async (event: any) => {
     console.log('Orchestratore in fase di AGGREGAZIONE (v2)...');
     try {
       const { jobId, s3Bucket, reports } = event.payload;
-      
+
       // Mappa per aggregare i risultati per Area (OWASP, TEST, DOCS)
       const areaMap: Record<string, { summary: string; report: string }> = {
         OWASP: { summary: '', report: '' },
@@ -66,10 +69,13 @@ export const orchestratorHandler = async (event: any) => {
               new GetObjectCommand({ Bucket: s3Bucket, Key: report.reportKey }),
             );
             content = await streamToString(response.Body);
-            
+
             // Cleanup S3
             await s3Client.send(
-              new DeleteObjectCommand({ Bucket: s3Bucket, Key: report.reportKey }),
+              new DeleteObjectCommand({
+                Bucket: s3Bucket,
+                Key: report.reportKey,
+              }),
             );
           } catch (err) {
             console.error(`Errore recupero report ${report.agent} da S3:`, err);
@@ -78,8 +84,12 @@ export const orchestratorHandler = async (event: any) => {
 
           try {
             const parsed = JSON.parse(content);
-            const area = (parsed.area || report.agent || 'UNKNOWN').toUpperCase();
-            
+            const area = (
+              parsed.area ||
+              report.agent ||
+              'UNKNOWN'
+            ).toUpperCase();
+
             // Supporto raggruppamento per aree principali
             let targetArea = 'UNKNOWN';
             if (area.includes('OWASP')) targetArea = 'OWASP';
@@ -92,14 +102,21 @@ export const orchestratorHandler = async (event: any) => {
             }
 
             // Aggregazione: concatena summary (se diversi) e report markdown
-            if (parsed.summary && !areaMap[targetArea].summary.includes(parsed.summary)) {
-              areaMap[targetArea].summary += (areaMap[targetArea].summary ? '\n' : '') + parsed.summary;
+            if (
+              parsed.summary &&
+              !areaMap[targetArea].summary.includes(parsed.summary)
+            ) {
+              areaMap[targetArea].summary +=
+                (areaMap[targetArea].summary ? '\n' : '') + parsed.summary;
             }
             if (parsed.report) {
-              areaMap[targetArea].report += (areaMap[targetArea].report ? '\n\n' : '') + parsed.report;
+              areaMap[targetArea].report +=
+                (areaMap[targetArea].report ? '\n\n' : '') + parsed.report;
             }
           } catch (e) {
-            console.warn(`[Orchestratore] Report ${report.agent} non è un JSON valido o manca di struttura v2.`);
+            console.warn(
+              `[Orchestratore] Report ${report.agent} non è un JSON valido o manca di struttura v2.`,
+            );
           }
         }
       }
@@ -108,14 +125,18 @@ export const orchestratorHandler = async (event: any) => {
       // FASE 3: MASTER POLISHING (Refining Area by Area)
       // ==========================================
       console.log('Orchestratore: avvio fase di Master Polishing...');
-      
-      const analysisDetails: { agentName: string; summary: string; report: string }[] = [];
-      
+
+      const analysisDetails: {
+        agentName: string;
+        summary: string;
+        report: string;
+      }[] = [];
+
       for (const [area, data] of Object.entries(areaMap)) {
         if (!data.report || data.report.trim() === '') continue;
 
         console.log(`Orchestratore: polishing area ${area}...`);
-        
+
         let polishedReport = data.report;
         if (MASTER_LEAD_ID !== 'UNSET') {
           try {
@@ -129,7 +150,7 @@ export const orchestratorHandler = async (event: any) => {
               REPORT DA PULIRE:
               ${data.report}`,
               `POLISHER_${area}`,
-              true
+              true,
             );
           } catch (e) {
             console.error(`Errore nel polishing di ${area}:`, e);
@@ -137,25 +158,30 @@ export const orchestratorHandler = async (event: any) => {
           }
         }
 
-        const dynamicSummary = extractFirstMeaningfulLine(polishedReport, /[📊🏆📘⚖️⚠️🔍🧪🛠️🔴🟠🟡]/g) || data.summary || 'Analisi completata.';
+        const dynamicSummary =
+          extractFirstMeaningfulLine(
+            polishedReport,
+            /[📊🏆📘⚖️⚠️🔍🧪🛠️🔴🟠🟡]/g,
+          ) ||
+          data.summary ||
+          'Analisi completata.';
 
         analysisDetails.push({
           agentName: area,
           summary: dynamicSummary,
-          report: polishedReport
+          report: polishedReport,
         });
       }
 
       return {
         jobId,
-        analysisDetails
+        analysisDetails,
       };
-
     } catch (error: any) {
       console.error('Errore in AGGREGAZIONE v2:', error?.message);
       return {
         jobId: event.payload?.jobId ?? 'unknown',
-        analysisDetails: []
+        analysisDetails: [],
       };
     }
   }
@@ -163,6 +189,6 @@ export const orchestratorHandler = async (event: any) => {
   console.error('Azione non riconosciuta:', event.action);
   return {
     jobId: event.payload?.jobId ?? 'unknown',
-    analysisDetails: []
+    analysisDetails: [],
   };
 };

@@ -3,7 +3,10 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { rmSync, existsSync } from 'fs';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
 import { createFullChunks } from './utils/smart-bundler';
-import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
+import {
+  invokeSubAgent,
+  extractFirstMeaningfulLine,
+} from './utils/agent-invoker';
 
 const s3Client = new S3Client({});
 
@@ -13,10 +16,10 @@ const DocAgentEventSchema = z.object({
   s3Prefix: z.string(),
 });
 
-const AGENT_TECH_ID  = process.env.DOCS_TECH_AGENT_ID  || 'ZPFNNQK2FO';
-const AGENT_GOV_ID   = process.env.DOCS_GOV_AGENT_ID   || 'UVFEQBJS1T';
-const AGENT_LEAD_ID  = process.env.DOCS_AGENT_ID        || 'DB16ZAYK3A';
-const ALIAS          = process.env.DOCS_AGENT_ALIAS_ID  || 'TSTALIASID';
+const AGENT_TECH_ID = process.env.DOCS_TECH_AGENT_ID || 'ZPFNNQK2FO';
+const AGENT_GOV_ID = process.env.DOCS_GOV_AGENT_ID || 'UVFEQBJS1T';
+const AGENT_LEAD_ID = process.env.DOCS_AGENT_ID || 'DB16ZAYK3A';
+const ALIAS = process.env.DOCS_AGENT_ALIAS_ID || 'TSTALIASID';
 
 const NO_TOOLS = `⚠️ REGOLA FERREA: NON USARE TOOL. Hai già tutto il contesto nel testo sotto. Produci solo il report Markdown richiesto.`;
 
@@ -32,7 +35,11 @@ export const docAgentHandler = async (event: unknown) => {
   let extractPath: string | undefined;
 
   try {
-    const { s3Bucket: bucket, s3Key: key, s3Prefix } = DocAgentEventSchema.parse(event);
+    const {
+      s3Bucket: bucket,
+      s3Key: key,
+      s3Prefix,
+    } = DocAgentEventSchema.parse(event);
 
     console.log('DOCS: extraction and bundling...');
     extractPath = await unzipRepoToTemp(bucket, key);
@@ -46,9 +53,10 @@ export const docAgentHandler = async (event: unknown) => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
         console.log(`DOCS: Tech review chunk ${i + 1}/${fullChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_TECH_ID,
-          `${NO_TOOLS}
+        parts.push(
+          await invokeSpec(
+            AGENT_TECH_ID,
+            `${NO_TOOLS}
 
 RUOLO: Senior Technical Writer. Analizza la documentazione tecnica in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
@@ -58,8 +66,9 @@ COMPITO:
 2. Se non trovi nulla, scrivi 'Nessuna documentazione tecnica rilevata in questo chunk'.
 3. NON segnalare mancanze globali. Riporta solo ciò che vedi qui.
 PRODUCI: Report tecnico in Markdown con titolo "## 📘 Revisione Tecnica (chunk ${i + 1}/${fullChunks.length})".`,
-          `TECH_WRITER_${i + 1}`,
-        ));
+            `TECH_WRITER_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
@@ -68,10 +77,13 @@ PRODUCI: Report tecnico in Markdown con titolo "## 📘 Revisione Tecnica (chunk
     const govResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
-        console.log(`DOCS: Service scan chunk ${i + 1}/${fullChunks.length}...`);
-        parts.push(await invokeSpec(
-          AGENT_GOV_ID,
-          `${NO_TOOLS}
+        console.log(
+          `DOCS: Service scan chunk ${i + 1}/${fullChunks.length}...`,
+        );
+        parts.push(
+          await invokeSpec(
+            AGENT_GOV_ID,
+            `${NO_TOOLS}
 
 RUOLO: Project Standard Officer. Analizza file informativi e legali in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
@@ -81,15 +93,21 @@ COMPITO:
 2. Se non trovi nulla, scrivi 'Nessun file informativo rilevato in questo chunk'.
 3. NON segnalare mancanze globali. Riporta solo ciò che vedi qui.
 PRODUCI: Report tecnico in Markdown con titolo "## ⚖️ Standard di Progetto (chunk ${i + 1}/${fullChunks.length})".`,
-          `COMPLIANCE_OFFICER_${i + 1}`,
-        ));
+            `COMPLIANCE_OFFICER_${i + 1}`,
+          ),
+        );
       }
       return parts.join('\n\n---\n\n');
     })();
 
-    const [techRes, govRes] = await Promise.all([techResPromise, govResPromise]);
+    const [techRes, govRes] = await Promise.all([
+      techResPromise,
+      govResPromise,
+    ]);
 
-    console.log('DOCS: specialized analysis complete. Starting Domain Lead aggregation...');
+    console.log(
+      'DOCS: specialized analysis complete. Starting Domain Lead aggregation...',
+    );
 
     const finalReport = await invokeLead(
       AGENT_LEAD_ID,
@@ -123,12 +141,18 @@ PRODUCI: Report Finale in Markdown con header "# 📘 Documentation & UX Strateg
       'Analisi DOCS completata.';
 
     const reportKey = `${s3Prefix}/docs-report.json`;
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: reportKey,
-      Body: JSON.stringify({ area: 'DOCS', summary: dynamicSummary, report: finalReport }),
-      ContentType: 'application/json',
-    }));
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: reportKey,
+        Body: JSON.stringify({
+          area: 'DOCS',
+          summary: dynamicSummary,
+          report: finalReport,
+        }),
+        ContentType: 'application/json',
+      }),
+    );
 
     return { agent: 'docs', status: 'success', reportKey };
   } catch (err: any) {

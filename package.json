@@ -88,7 +88,7 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(@strands-agents/sdk|@modelcontextprotocol)/)"
+      "node_modules/(?!(@strands-agents/sdk|@modelcontextprotocol|repomix|is-binary-path|binary-extensions)/)"
     ],
     "setupFiles": [
       "dotenv/config"

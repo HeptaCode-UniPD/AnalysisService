@@ -1,4 +1,5 @@
 import { readFileSync, unlinkSync, existsSync } from 'fs';
+import { runCli } from 'repomix';
 
 const MAX_BUNDLE_CHARS = 150_000;
 
@@ -11,7 +12,6 @@ async function runRepomix(
   const outputPath = `/tmp/repomix-${outputSuffix}-${Date.now()}.txt`;
 
   try {
-    const { runCli } = await import('repomix');
 
     await runCli([extractPath], extractPath, {
       include,
@@ -173,16 +173,16 @@ export function extractImportedLibraries(
 
   const jsPatterns = [
     /(?:^|\s)(?:import|require)\s*(?:\(?\s*['"`])((?!\.{1,2}[/\\])[^'"``.]+)(?:['"`])/gm,
-    /from\s+['"`]((?!\.{1,2}[/\\])[^'"``.]+)['"`]/gm,
+    /(?:^|\s)from\s+['"`]((?!\.{1,2}[/\\])[^'"``.]+)['"`]/gm,
   ];
   const phpPatterns = [
-    /^use\s+([\w\\]+)/gm,
-    /(?:require|include)(?:_once)?\s*[\(]?\s*['"`]([^'"``.]+)['"`]/gm,
+    /(?:^|\s)use\s+([\w\\]+)/gm,
+    /(?:require|include)(?:_once)?\s*[\(]?\s*['"`]([^'"`\s]+)['"`]/gm,
   ];
-  const pyPatterns = [/^import\s+([\w.]+)/gm, /^from\s+([\w.]+)\s+import/gm];
+  const pyPatterns = [/(?:^|\s)import\s+([\w.]+)/gm, /(?:^|\s)from\s+([\w.]+)\s+import/gm];
   const cppPatterns = [/#include\s*[<"]([^>"\s]+)[>"]/gm];
 
-  const javaPatterns = [/^import\s+([\w.]+);/gm];
+  const javaPatterns = [/(?:^|\s)import\s+([\w.]+);/gm];
 
   for (const pattern of [
     ...jsPatterns,
@@ -193,7 +193,7 @@ export function extractImportedLibraries(
   ]) {
     let match;
     while ((match = pattern.exec(content)) !== null) {
-      const lib = match[1].split('/')[0].split('\\')[0];
+      const lib = match[1].split('/')[0].split('\\')[0].split('.')[0];
       if (lib && lib.length > 1 && !lib.startsWith('.')) {
         libs.add(lib);
       }

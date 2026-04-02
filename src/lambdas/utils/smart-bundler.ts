@@ -85,7 +85,7 @@ function splitIntoChunks(
 export async function createSourceBundle(extractPath: string): Promise<string> {
   const raw = await runRepomix(
     extractPath,
-    '**/README.md,**/readme.md,**/README,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,cpp,cs,rs,swift,kt}',
+    '**/README.md,**/readme.md,**/README,**/readme.txt,**/README.txt,**/LICENSE*,**/CONTRIBUTING*,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**',
     'source',
   );
@@ -112,7 +112,7 @@ export async function createManifestBundle(
 export async function createFullBundle(extractPath: string): Promise<string> {
   const raw = await runRepomix(
     extractPath,
-    '**/*',
+    '**/README.md,**/readme.md,**/README,**/readme.txt,**/README.txt,**/LICENSE*,**/CONTRIBUTING*,**/*',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.ico,**/*.svg,**/*.woff,**/*.woff2,**/*.ttf,**/*.eot,**/*.otf,**/*.mp4,**/*.mp3,**/*.zip,**/*.tar,**/*.gz,**/*.pdf,**/*.bin',
     'full',
   );
@@ -140,7 +140,7 @@ export async function createSourceChunks(
 ): Promise<string[]> {
   const raw = await runRepomix(
     extractPath,
-    '**/README.md,**/readme.md,**/README,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
+    '**/README.md,**/readme.md,**/README,**/readme.txt,**/README.txt,**/LICENSE*,**/CONTRIBUTING*,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**',
     'source-chunked',
   );
@@ -154,7 +154,7 @@ export async function createSourceChunks(
 export async function createFullChunks(extractPath: string): Promise<string[]> {
   const raw = await runRepomix(
     extractPath,
-    '**/*',
+    '**/README.md,**/readme.md,**/README,**/readme.txt,**/README.txt,**/LICENSE*,**/CONTRIBUTING*,**/*',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.ico,**/*.svg,**/*.woff,**/*.woff2,**/*.ttf,**/*.eot,**/*.otf,**/*.mp4,**/*.mp3,**/*.zip,**/*.tar,**/*.gz,**/*.pdf,**/*.bin',
     'full-chunked',
   );

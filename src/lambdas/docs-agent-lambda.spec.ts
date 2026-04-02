@@ -47,7 +47,7 @@ describe('DocAgentHandler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Setup mock S3 Client
     (S3Client as jest.Mock).mockImplementation(() => ({
       send: mockS3Send,
@@ -58,7 +58,7 @@ describe('DocAgentHandler', () => {
     (createFullChunks as jest.Mock).mockResolvedValue(['Chunk 1 content', 'Chunk 2 content']);
     (invokeSubAgent as jest.Mock).mockResolvedValue('Mocked Agent Report Content');
     (extractFirstMeaningfulLine as jest.Mock).mockReturnValue('Mocked Summary Line');
-    
+
     // Setup FS mocks
     (existsSync as jest.Mock).mockReturnValue(true);
   });
@@ -80,7 +80,7 @@ describe('DocAgentHandler', () => {
      * Totale: 5 invocazioni
      */
     expect(invokeSubAgent).toHaveBeenCalledTimes(5);
-    
+
     // Verifiche S3
     expect(mockS3Send).toHaveBeenCalled();
     const s3Call = mockS3Send.mock.calls[0][0];
@@ -114,7 +114,7 @@ describe('DocAgentHandler', () => {
 
     expect(result.status).toBe('error');
     expect(result.error).toBe('Bundling failed');
-    
+
     // Verifica che il cleanup sia comunque avvenuto
     expect(rmSync).toHaveBeenCalled();
   });

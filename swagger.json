@@ -1,0 +1,103 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/analyze": {
+      "post": {
+        "description": "\n      Questa operazione avvia una pipeline di analisi asincrona.\n      - **Input**: URL di un repository pubblico.\n      - **Processo**: Esegue Pull Repo -> Bundling -> Analisi AI (Docs, OWASP, Test).\n      - **Output Immediato**: Conferma dell'accodamento con un jobId.\n      - **Output Finale**: Una volta completata (fino a 15 min), il sistema invierà una notifica POST all'URL di Webhook pre-configurato con il report Markdown finale.\n    ",
+        "operationId": "AppController_startAnalysis",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Richiesta accettata. L'analisi è stata accodata con successo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API Key mancante o non valida."
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ],
+        "summary": "Avvia l'analisi asincrona di un repository",
+        "tags": [
+          "Pipeline Analysis"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Analysis Service MS2",
+    "description": "API per l'analisi automatizzata di repository via AI (Docs, OWASP, Test).",
+    "version": "2.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "x-api-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "AnalysisRequestDto": {
+        "type": "object",
+        "properties": {
+          "repoUrl": {
+            "type": "string",
+            "description": "URL del repository GitHub/GitLab da analizzare",
+            "example": "https://github.com/HeptaCode-UniPD/AnalysisService.git"
+          }
+        },
+        "required": [
+          "repoUrl"
+        ]
+      },
+      "AnalysisResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Messaggio di conferma dell'avvio della pipeline",
+            "example": "Analisi avviata con successo"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "ID univoco del job di analisi generato dal sistema",
+            "example": "5f9a1b2c-3d4e-5f6g-7h8i-9j0k1l2m3n4o"
+          },
+          "executionArn": {
+            "type": "string",
+            "description": "ARN dell'esecuzione della State Machine AWS Step Functions",
+            "example": "arn:aws:states:eu-central-1:123456789012:execution:ms2-pipeline-dev:5f9a1b2c-3d4e..."
+          }
+        },
+        "required": [
+          "message",
+          "jobId",
+          "executionArn"
+        ]
+      }
+    }
+  }
+}

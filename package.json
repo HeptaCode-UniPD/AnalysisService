@@ -31,6 +31,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/microservices": "^11.1.17",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.2.6",
     "@nestjs/websockets": "^11.1.17",
     "@vendia/serverless-express": "^4.12.6",
     "adm-zip": "^0.5.16",
@@ -39,6 +40,7 @@
     "reflect-metadata": "^0.2.2",
     "repomix": "^1.13.1",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {

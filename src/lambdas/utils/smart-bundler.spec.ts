@@ -16,10 +16,10 @@ jest.mock('fs', () => {
 });
 
 import { runCli as mockRunCliActual } from 'repomix';
-import { 
-  createSourceBundle, 
-  createManifestBundle, 
-  createFullBundle, 
+import {
+  createSourceBundle,
+  createManifestBundle,
+  createFullBundle,
   createConfigBundle,
   createSourceChunks,
   createFullChunks,
@@ -47,7 +47,7 @@ describe('SmartBundler', () => {
       const result = await createSourceBundle(extractPath);
 
       expect(mockRunCli).toHaveBeenCalledWith([extractPath], extractPath, expect.objectContaining({
-        include: expect.stringContaining('ts,js'),
+        include: expect.stringContaining('README.md'),
         output: expect.stringContaining('repomix-source-')
       }));
       expect(result).toBe('content-source');
@@ -78,7 +78,7 @@ describe('SmartBundler', () => {
       const result = await createFullBundle(extractPath);
 
       expect(mockRunCli).toHaveBeenCalledWith([extractPath], extractPath, expect.objectContaining({
-        include: '**/*'
+        include: expect.stringContaining('README.md')
       }));
       expect(result).toBe('content-full');
     });
@@ -220,17 +220,17 @@ describe('SmartBundler', () => {
       mockRunCli.mockResolvedValue(undefined);
       mockedFs.existsSync.mockReturnValue(true);
       mockedFs.readFileSync.mockReturnValue('small');
-      
+
       const chunks = await createSourceChunks(extractPath);
       expect(chunks).toEqual(['small']);
     });
-    
+
     it('dovrebbe dividere esattamente a MAX_BUNDLE_CHARS se non trova separatori', async () => {
-      const huge = 'X'.repeat(200); 
+      const huge = 'X'.repeat(200);
       mockRunCli.mockResolvedValue(undefined);
       mockedFs.existsSync.mockReturnValue(true);
       mockedFs.readFileSync.mockReturnValue(huge);
-      
+
       const chunks = await createSourceChunks(extractPath);
       // In questo test dobbiamo forzare il limite per non generare stringhe enormi
       // siccome splitIntoChunks è usata internamente con MAX_BUNDLE_CHARS fissato,

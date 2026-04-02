@@ -15,7 +15,10 @@ describe('AppController', () => {
         {
           provide: AppService,
           useValue: {
-            triggerAnalysis: jest.fn().mockResolvedValue('arn:simulato'),
+            triggerAnalysis: jest.fn().mockResolvedValue({
+              executionArn: 'arn:simulato',
+              jobId: 'job-123',
+            }),
           },
         },
       ],

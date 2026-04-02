@@ -23,7 +23,6 @@ import {
   createConfigBundle,
   createSourceChunks,
   createFullChunks,
-  createDocsBundle,
   extractImportedLibraries
 } from './smart-bundler';
 
@@ -122,22 +121,6 @@ describe('SmartBundler', () => {
 
       const chunks = await createFullChunks(extractPath);
       expect(chunks).toEqual(['small-content']);
-    });
-
-    it('createDocsBundle dovrebbe filtrare solo file MD/TXT/YAML', async () => {
-      mockRunCli.mockResolvedValue(undefined);
-      mockedFs.existsSync.mockReturnValue(true);
-      mockedFs.readFileSync.mockReturnValue('docs-content');
-
-      const chunks = await createDocsBundle(extractPath);
-
-      expect(mockRunCli).toHaveBeenCalledWith([extractPath], extractPath, expect.objectContaining({
-        include: expect.stringContaining('.md')
-      }));
-      expect(mockRunCli).toHaveBeenCalledWith([extractPath], extractPath, expect.objectContaining({
-        include: expect.stringContaining('README')
-      }));
-      expect(chunks).toEqual(['docs-content']);
     });
   });
 

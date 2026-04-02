@@ -11,11 +11,12 @@ export class AppController {
   @Post('analyze')
   @HttpCode(200)
   async startAnalysis(@Body() payload: AnalysisRequestDto) {
-    const executionArn = await this.appService.triggerAnalysis(payload);
+    const { executionArn, jobId } = await this.appService.triggerAnalysis(payload);
 
     return {
       message: 'Analisi avviata con successo',
-      executionArn: executionArn,
+      jobId,
+      executionArn,
     };
   }
 }

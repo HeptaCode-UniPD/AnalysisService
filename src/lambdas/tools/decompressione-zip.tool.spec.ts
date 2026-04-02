@@ -7,9 +7,13 @@ import AdmZip from 'adm-zip'; // <-- IMPORTANTE: Aggiungi questo
 
 const mockSend = jest.fn();
 
-jest.mock('@strands-agents/sdk', () => ({
-  tool: jest.fn((config) => config),
-}));
+jest.mock(
+  '@strands-agents/sdk',
+  () => ({
+    tool: jest.fn((config) => config),
+  }),
+  { virtual: true },
+);
 
 // Mock di adm-zip: deve restituire un costruttore mockato
 jest.mock('adm-zip', () => {

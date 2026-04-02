@@ -1,5 +1,5 @@
 import { readFileSync, unlinkSync, existsSync } from 'fs';
-import { runCli } from 'repomix';
+import { randomUUID } from 'crypto';
 
 const MAX_BUNDLE_CHARS = 150_000;
 
@@ -9,10 +9,11 @@ async function runRepomix(
   ignore: string,
   outputSuffix: string,
 ): Promise<string> {
-  const outputPath = `/tmp/repomix-${outputSuffix}-${Date.now()}.txt`;
+  const outputPath = `/tmp/repomix-${outputSuffix}-${randomUUID()}.txt`;
 
   try {
 
+    const { runCli } = await (eval('import("repomix")') as Promise<typeof import('repomix')>);
     await runCli([extractPath], extractPath, {
       include,
       ignore,

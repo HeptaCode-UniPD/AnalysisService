@@ -155,7 +155,8 @@
                 "FunctionName": "arn:aws:lambda:${aws:region}:${aws:accountId}:function:ms2-analysis-service-${sls:stage}-webhookSender",
                 "Payload": {
                   "report": "{% $finalReport %}",
-                  "jobId": "{% $jobId %}"
+                  "jobId": "{% $jobId %}",
+                  "repoUrl": "{% $repoUrl %}"
                 }
               },
               "End": true

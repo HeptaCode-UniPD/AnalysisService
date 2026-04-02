@@ -4,6 +4,7 @@ import {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import { randomUUID } from 'crypto';
 import { sanitizeMarkdown, rawAgentOutput } from './markdown-helper';
+import { setTimeout } from 'timers/promises';
 
 const bedrockClient = new BedrockAgentRuntimeClient({
   region: process.env.AWS_REGION,
@@ -58,7 +59,7 @@ export async function invokeSubAgent(
     returnControlResults = [];
 
     try {
-      const response = await bedrockClient.send(command);
+      const response = await sendWithRetry(command);
 
       if (!response.completion) {
         console.warn(
@@ -171,4 +172,31 @@ export function extractFirstMeaningfulLine(
       .substring(0, 200);
   }
   return '';
+}
+
+async function sendWithRetry(command: InvokeAgentCommand, maxRetries = 5) {
+  let attempt = 0;
+  let baseDelay = 2000; // Partiamo da 2 secondi
+
+  while (attempt < maxRetries) {
+    try {
+      return await bedrockClient.send(command);
+    } catch (err: any) {
+      const isThrottling = 
+        err.name === 'ThrottlingException' || 
+        err.$metadata?.httpStatusCode === 429 || 
+        err.$metadata?.httpStatusCode === 503;
+
+      if (isThrottling && attempt < maxRetries - 1) {
+        attempt++;
+        // Calcola il ritardo esponenziale con un po' di "jitter" (casualità) per evitare picchi sincroni
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.warn(`[AWS Bedrock] Throttling rilevato. Ritento tra ${Math.round(delay)}ms (Tentativo ${attempt}/${maxRetries})...`);
+        await setTimeout(delay);
+      } else {
+        throw err; // Se non è throttling o abbiamo superato i tentativi, lancia l'errore
+      }
+    }
+  }
+  throw new Error("Superato il numero massimo di tentativi su AWS Bedrock.");
 }

@@ -1,6 +1,6 @@
 // Modifica suggerita per src/lambdas/webhook.ts
 export const handler = async (event: any) => {
-  const { report } = event;
+  const { report, repoUrl } = event;
   const apiKey = process.env.DESTINATION_API_KEY;
   const webhookUrl = process.env.DESTINATION_URL;
 
@@ -10,6 +10,12 @@ export const handler = async (event: any) => {
     );
   }
 
+  // 2. Unisci il report originale con il repoUrl
+  const finalPayload = {
+    ...report,
+    repoUrl: repoUrl
+  };
+
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -17,7 +23,7 @@ export const handler = async (event: any) => {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
       },
-      body: JSON.stringify(report),
+      body: JSON.stringify(finalPayload),
     });
 
     if (!response.ok) {

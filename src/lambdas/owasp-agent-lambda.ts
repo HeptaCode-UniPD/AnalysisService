@@ -55,11 +55,9 @@ export const owaspAgentHandler = async (event: unknown) => {
     extractPath = await unzipRepoToTemp(bucket, key);
 
     console.log('OWASP: creating thematic bundles...');
-    const [manifestBundle, sourceChunks, fullChunks] = await Promise.all([
-      createManifestBundle(extractPath),
-      createSourceChunks(extractPath),
-      createFullChunks(extractPath),
-    ]);
+    const manifestBundle = await createManifestBundle(extractPath);
+    const sourceChunks = await createSourceChunks(extractPath);
+    const fullChunks = await createFullChunks(extractPath);
 
     const rawImports = extractImportedLibraries(sourceChunks);
     console.log(

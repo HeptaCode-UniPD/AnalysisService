@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { rmSync, existsSync } from 'fs';
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
-import { createFullChunks } from './utils/smart-bundler';
+import { createSourceChunks } from './utils/smart-bundler';
 import {
   invokeSubAgent,
   extractFirstMeaningfulLine,
@@ -43,12 +43,12 @@ export const docAgentHandler = async (event: unknown) => {
 
     console.log('DOCS: extraction and bundling...');
     extractPath = await unzipRepoToTemp(bucket, key);
-    const fullChunks = await createFullChunks(extractPath);
+    const fullChunks = await createSourceChunks(extractPath);
     console.log(`DOCS: ${fullChunks.length} full chunk(s).`);
 
     console.log('DOCS: launching parallel sub-analyses...');
 
-    // ── 1. Tech Review — tutti i chunk in sequenza ──
+// ── 1. Tech Review — tutti i chunk in sequenza ──
     const techResPromise = (async () => {
       const parts: string[] = [];
       for (let i = 0; i < fullChunks.length; i++) {
@@ -60,6 +60,11 @@ export const docAgentHandler = async (event: unknown) => {
 
 RUOLO: Senior Technical Writer. Analizza la documentazione tecnica in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
+
+CONTENUTO DEL CHUNK:
+\`\`\`
+${fullChunks[i]}
+\`\`\`
 
 COMPITO:
 1. Identifica: README, guide, API docs e commenti tecnici (JSDoc/PHPDoc).
@@ -87,6 +92,11 @@ PRODUCI: Report tecnico in Markdown con titolo "## 📘 Revisione Tecnica (chunk
 
 RUOLO: Project Standard Officer. Analizza file informativi e legali in questo chunk.
 Chunk ${i + 1} di ${fullChunks.length}.
+
+CONTENUTO DEL CHUNK:
+\`\`\`
+${fullChunks[i]}
+\`\`\`
 
 COMPITO:
 1. Identifica: LICENSE, informative security, CONTRIBUTING o file legali.

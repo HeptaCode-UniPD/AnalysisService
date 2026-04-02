@@ -85,7 +85,7 @@ function splitIntoChunks(
 export async function createSourceBundle(extractPath: string): Promise<string> {
   const raw = await runRepomix(
     extractPath,
-    '**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,cpp,cs,rs,swift,kt}',
+    '**/README.md,**/readme.md,**/README,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,cpp,cs,rs,swift,kt}',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**',
     'source',
   );
@@ -140,7 +140,7 @@ export async function createSourceChunks(
 ): Promise<string[]> {
   const raw = await runRepomix(
     extractPath,
-    '**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
+    '**/README.md,**/readme.md,**/README,**/*.{ts,js,mjs,cjs,jsx,tsx,php,py,java,go,rb,c,h,cpp,hpp,c++,cs,rs,swift,kt}',
     '**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/.git/**,**/__pycache__/**,**/target/**',
     'source-chunked',
   );

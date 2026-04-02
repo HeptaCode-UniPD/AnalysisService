@@ -64,7 +64,7 @@ export async function invokeSubAgent(
         console.warn(
           `[${agentName}] response.completion undefined al loop ${loopCount}`,
         );
-        break;
+        return isLead ? sanitizeMarkdown(fullText) : rawAgentOutput(fullText);
       }
 
       for await (const event of response.completion) {

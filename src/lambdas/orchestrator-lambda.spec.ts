@@ -131,13 +131,15 @@ describe('OrchestratorHandler', () => {
       const result = await orchestratorHandler(mockAggregateEvent);
 
       expect(result.jobId).toBe('job-agg-123');
-      expect(result.analysisDetails).toHaveLength(2);
+      // 3 sezioni: OWASP, TEST (da S3) + DOCS (algoritmica)
+      expect(result.analysisDetails).toHaveLength(3);
       
       // Verifica mapping aree
-      expect(result.analysisDetails[0].agentName).toBe('OWASP');
-      expect(result.analysisDetails[1].agentName).toBe('TEST');
+      expect(result.analysisDetails.map((d: any) => d.agentName)).toContain('OWASP');
+      expect(result.analysisDetails.map((d: any) => d.agentName)).toContain('TEST');
+      expect(result.analysisDetails.map((d: any) => d.agentName)).toContain('DOCS');
       
-      // Verifica invocazione polisher
+      // Verifica invocazione polisher (solo per OWASP e TEST, DOCS saltata perché algoritmica)
       expect(invokeSubAgent).toHaveBeenCalledTimes(2);
       expect(mockS3Send).toHaveBeenCalledWith(expect.any(GetObjectCommand));
       expect(mockS3Send).toHaveBeenCalledWith(expect.any(DeleteObjectCommand));
@@ -152,21 +154,23 @@ describe('OrchestratorHandler', () => {
         payload: {
           jobId: 'job-bad-json',
           s3Bucket: 'b',
-          reports: [{ agent: 'docs', status: 'success', reportKey: 'k' }]
+          reports: [{ agent: 'owasp', status: 'success', reportKey: 'k' }]
         }
       };
 
       const result = await orchestratorHandler(event);
-      expect(result.analysisDetails).toHaveLength(0);
+      // Solo 1 sezione: DOCS (algoritmica), OWASP saltata per JSON invalido
+      expect(result.analysisDetails).toHaveLength(1);
+      expect(result.analysisDetails[0].agentName).toBe('DOCS');
     });
 
     it('dovrebbe saltare un report se il download da S3 fallisce', async () => {
       mockS3Send.mockRejectedValueOnce(new Error('S3 Access Denied'));
       
       const result = await orchestratorHandler(mockAggregateEvent);
-      // Entrambi falliscono perché mockRejectedValueOnce qui si applica a tutto se non resettato, 
-      // ma il punto è che analysisDetails deve essere vuoto
-      expect(result.analysisDetails).toEqual([]);
+      // analysisDetails contiene SOLO DOCS (algoritmica)
+      expect(result.analysisDetails).toHaveLength(1);
+      expect(result.analysisDetails[0].agentName).toBe('DOCS');
     });
 
     it('dovrebbe aggregare summary e report della stessa area', async () => {
@@ -199,9 +203,10 @@ describe('OrchestratorHandler', () => {
       };
 
       const result = await localOrchestrator(event);
-      expect(result.analysisDetails[0].report).toContain('R1\n\nR2');
+      const docsSection = result.analysisDetails.find((d: any) => d.agentName === 'DOCS');
+      expect(docsSection.report).toContain('R1\n\nR2');
       // extractFirstMeaningfulLine viene chiamato sul report unito e ritorna il mock
-      expect(result.analysisDetails[0].summary).toBe('Mocked Summary'); 
+      expect(docsSection.summary).toBe('Mocked Summary'); 
     });
 
     it('dovrebbe gestire aree non standard e inizializzare correttamente la mappa', async () => {
@@ -220,7 +225,9 @@ describe('OrchestratorHandler', () => {
       };
 
       const result = await orchestratorHandler(event);
-      expect(result.analysisDetails[0].agentName).toBe('CUSTOM_SECURITY');
+      // CUSTOM_SECURITY + DOCS (algoritmica)
+      expect(result.analysisDetails.map((d: any) => d.agentName)).toContain('CUSTOM_SECURITY');
+      expect(result.analysisDetails.map((d: any) => d.agentName)).toContain('DOCS');
     });
 
     it('dovrebbe utilizzare data.summary se extractFirstMeaningfulLine non trova nulla', async () => {
@@ -236,12 +243,49 @@ describe('OrchestratorHandler', () => {
       });
 
       const result = await localOrchestrator(mockAggregateEvent);
-      expect(result.analysisDetails[0].summary).toBe('FALLBACK_S');
+      const owaspSection = result.analysisDetails.find((d: any) => d.agentName === 'OWASP');
+      expect(owaspSection.summary).toBe('FALLBACK_S');
     });
 
     it('dovrebbe usare "unknown" come jobId se l\'azione è errata e il payload è vuoto', async () => {
       const result = await orchestratorHandler({ action: 'WRONG', payload: {} });
       expect(result.jobId).toBe('unknown');
+    });
+
+    it('dovrebbe generare algoritmicamente la sezione DOCS se assente dai report', async () => {
+      // Configuriamo S3 per restituire solo OWASP
+      const owaspContent = JSON.stringify({ area: 'OWASP', summary: 'S1', report: 'R1' });
+      mockS3Send
+        .mockResolvedValueOnce({ Body: createMockStream(owaspContent) })
+        .mockResolvedValueOnce({}); // Delete
+
+      const event = {
+        action: 'AGGREGATE',
+        payload: {
+          jobId: 'job-docs-missing',
+          s3Bucket: 'b',
+          reports: [{ agent: 'owasp', status: 'success', reportKey: 'k1' }]
+        }
+      };
+
+      // Disabilitiamo il polisher per semplicità
+      process.env.MASTER_LEAD_AGENT_ID = 'UNSET';
+      let localOrchestrator: any;
+      jest.isolateModules(() => {
+        localOrchestrator = require('./orchestrator-lambda').orchestratorHandler;
+      });
+
+      const result = await localOrchestrator(event);
+
+      // Verifichiamo che ci siano 2 sezioni: OWASP (da S3) e DOCS (algoritmica)
+      const docsSection = result.analysisDetails.find((d: any) => d.agentName === 'DOCS');
+      expect(docsSection).toBeDefined();
+      expect(docsSection.summary).toBe('Analisi saltata');
+      expect(docsSection.report).toContain('non è presente il tag release');
+      
+      const owaspSection = result.analysisDetails.find((d: any) => d.agentName === 'OWASP');
+      expect(owaspSection).toBeDefined();
+      expect(owaspSection.report).toBe('R1');
     });
 
     it('dovrebbe gestire errori nel polishing mantenendo il report originale', async () => {

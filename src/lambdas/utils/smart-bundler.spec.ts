@@ -1,9 +1,6 @@
-// Mock di repomix (deve essere in cima e gestito tramite import)
-jest.mock('repomix', () => ({
-  runCli: jest.fn(() => Promise.resolve()),
-}));
-
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
+
 // Mock di fs selettivo per interceptare chiamate locali
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
@@ -15,7 +12,28 @@ jest.mock('fs', () => {
   };
 });
 
-import { runCli as mockRunCliActual } from 'repomix';
+// Mock di crypto per UUID deterministici
+jest.mock('crypto', () => ({
+  randomUUID: jest.fn(() => 'test-uuid'),
+}));
+
+const mockRunCli = jest.fn();
+
+// Mock di global.eval per gestire eval('import("repomix")')
+const originalEval = global.eval;
+beforeAll(() => {
+  global.eval = jest.fn((cmd: string) => {
+    if (cmd.includes('import("repomix")')) {
+      return Promise.resolve({ runCli: mockRunCli });
+    }
+    return originalEval(cmd);
+  }) as any;
+});
+
+afterAll(() => {
+  global.eval = originalEval;
+});
+
 import {
   createSourceBundle,
   createManifestBundle,
@@ -27,7 +45,6 @@ import {
 } from './smart-bundler';
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
-const mockRunCli = mockRunCliActual as jest.Mock;
 
 describe('SmartBundler', () => {
   const extractPath = '/tmp/test-extract';

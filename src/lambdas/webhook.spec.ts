@@ -25,7 +25,12 @@ describe('WebhookHandler', () => {
       status: 200,
     });
 
-    const result = await webhookHandler({ report: mockReport });
+    const mockEvent = { 
+      report: mockReport, 
+      repoUrl: 'https://github.com/user/repo' 
+    };
+    
+    const result = await webhookHandler(mockEvent);
 
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.external.com/webhook',
@@ -35,7 +40,10 @@ describe('WebhookHandler', () => {
           'Content-Type': 'application/json',
           'x-api-key': 'EXTERNAL_SECURE_KEY',
         },
-        body: JSON.stringify(mockReport),
+        body: JSON.stringify({
+          ...mockReport,
+          repoUrl: 'https://github.com/user/repo'
+        }),
       })
     );
     expect(result).toEqual({ success: true });

@@ -9,6 +9,11 @@ jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
   InvokeAgentCommand: jest.fn().mockImplementation((input: any) => ({ input })),
 }));
 
+jest.mock('timers/promises', () => ({
+  setTimeout: jest.fn(() => Promise.resolve()),
+}));
+
+import { setTimeout } from 'timers/promises';
 import { invokeSubAgent, extractFirstMeaningfulLine } from './agent-invoker';
 
 describe('AgentInvoker', () => {
@@ -126,10 +131,6 @@ describe('AgentInvoker', () => {
 
     it('dovrebbe fermarsi al raggiungimento di MAX_LOOPS', async () => {
       // Simula un agente che continua a chiedere tool
-      const mockResponseLoop = {
-        completion: createMockStream([{ returnControl: { invocationId: 'id', invocationInputs: [] } }])
-      };
-      
       mockBedrockSend.mockImplementation(() => Promise.resolve({
         completion: createMockStream([{ returnControl: { invocationId: 'id', invocationInputs: [] } }])
       }));
@@ -149,6 +150,66 @@ describe('AgentInvoker', () => {
         mockBedrockSend.mockResolvedValue({ completion: createMockStream([]) });
         const result = await invokeSubAgent('a', 'b', 'p', 'Agent', false);
         expect(result).toBe('');
+    });
+
+    describe('Resilienza (Retry Logic)', () => {
+      const throttlingError = Object.assign(new Error('Throttling'), { name: 'ThrottlingException' });
+      const serverError = Object.assign(new Error('Service Unavailable'), { $metadata: { httpStatusCode: 503 } });
+
+      it('dovrebbe riprovare l\'invocazione se riceve ThrottlingException e poi riuscire', async () => {
+        const mockResponse = {
+          completion: createMockStream([
+            { chunk: { bytes: new TextEncoder().encode('Riuscito dopo retry') } }
+          ])
+        };
+
+        mockBedrockSend
+          .mockRejectedValueOnce(throttlingError)
+          .mockResolvedValueOnce(mockResponse);
+
+        const result = await invokeSubAgent('a', 'b', 'p', 'Agent', false);
+
+        expect(result).toBe('Riuscito dopo retry');
+        expect(mockBedrockSend).toHaveBeenCalledTimes(2);
+        expect(setTimeout).toHaveBeenCalled();
+      });
+
+      it('dovrebbe riprovare fino al limite massimo (5 tentativi) e poi fallire', async () => {
+        mockBedrockSend.mockRejectedValue(throttlingError);
+
+        const result = await invokeSubAgent('a', 'b', 'p', 'Agent', false);
+
+        // Bedrock invocato 5 volte prima di lanciare l'errore finale (nel loop di retry)
+        // Nota: invokeSubAgent cattura l'errore finale e ritorna un messaggio amichevole
+        expect(mockBedrockSend).toHaveBeenCalledTimes(5);
+        expect(result).toContain('Errore analisi Agent');
+      });
+
+      it('dovrebbe riprovare anche con errore 503 (Service Unavailable)', async () => {
+        const mockResponse = {
+          completion: createMockStream([
+            { chunk: { bytes: new TextEncoder().encode('OK') } }
+          ])
+        };
+
+        mockBedrockSend
+          .mockRejectedValueOnce(serverError)
+          .mockResolvedValueOnce(mockResponse);
+
+        const result = await invokeSubAgent('a', 'b', 'p', 'Agent', false);
+        expect(result).toBe('OK');
+        expect(mockBedrockSend).toHaveBeenCalledTimes(2);
+      });
+
+      it('non dovrebbe riprovare per errori non-throttling (es. 400 Bad Request)', async () => {
+        const badRequest = Object.assign(new Error('Validation Exception'), { $metadata: { httpStatusCode: 400 } });
+        mockBedrockSend.mockRejectedValue(badRequest);
+
+        const result = await invokeSubAgent('a', 'b', 'p', 'Agent', false);
+        expect(mockBedrockSend).toHaveBeenCalledTimes(1);
+        expect(setTimeout).not.toHaveBeenCalled();
+        expect(result).toContain('Validation Exception');
+      });
     });
   });
 

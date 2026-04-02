@@ -19,7 +19,7 @@ jest.mock('./tools/decompressione-zip.tool', () => ({
 }));
 
 jest.mock('./utils/smart-bundler', () => ({
-  createFullChunks: jest.fn(),
+  createSourceChunks: jest.fn(),
 }));
 
 jest.mock('./utils/agent-invoker', () => ({
@@ -27,10 +27,9 @@ jest.mock('./utils/agent-invoker', () => ({
   extractFirstMeaningfulLine: jest.fn(),
 }));
 
-// Importiamo solo i tipi o i mock per le asserzioni (senza caricare i file reali se possibile)
-// In Jest, quando un modulo è mockato, gli import restituiscono i mock.
+// Importiamo solo i tipi o i mock per le asserzioni
 import { unzipRepoToTemp } from './tools/decompressione-zip.tool';
-import { createFullChunks } from './utils/smart-bundler';
+import { createSourceChunks } from './utils/smart-bundler';
 import { invokeSubAgent, extractFirstMeaningfulLine } from './utils/agent-invoker';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { rmSync, existsSync } from 'fs';
@@ -55,7 +54,7 @@ describe('DocAgentHandler', () => {
 
     // Setup utility mocks
     (unzipRepoToTemp as jest.Mock).mockResolvedValue('/tmp/extracted-repo');
-    (createFullChunks as jest.Mock).mockResolvedValue(['Chunk 1 content', 'Chunk 2 content']);
+    (createSourceChunks as jest.Mock).mockResolvedValue(['Chunk 1 content', 'Chunk 2 content']);
     (invokeSubAgent as jest.Mock).mockResolvedValue('Mocked Agent Report Content');
     (extractFirstMeaningfulLine as jest.Mock).mockReturnValue('Mocked Summary Line');
 
@@ -70,7 +69,7 @@ describe('DocAgentHandler', () => {
 
     // Verifiche flusso principale
     expect(unzipRepoToTemp).toHaveBeenCalledWith('test-bucket', 'analysis/source.zip');
-    expect(createFullChunks).toHaveBeenCalledWith('/tmp/extracted-repo');
+    expect(createSourceChunks).toHaveBeenCalledWith('/tmp/extracted-repo');
 
     /**
      * Calcolo chiamate invokeSubAgent:
@@ -108,7 +107,7 @@ describe('DocAgentHandler', () => {
 
   it('dovrebbe catturare eccezioni durante l\'esecuzione e pulire le risorse', async () => {
     // Simuliamo un errore durante il bundling
-    (createFullChunks as jest.Mock).mockRejectedValue(new Error('Bundling failed'));
+    (createSourceChunks as jest.Mock).mockRejectedValue(new Error('Bundling failed'));
 
     const result = await docAgentHandler(mockEvent);
 

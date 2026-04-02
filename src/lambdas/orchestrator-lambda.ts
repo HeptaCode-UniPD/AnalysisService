@@ -121,6 +121,15 @@ export const orchestratorHandler = async (event: any) => {
         }
       }
 
+      // ─── LOGICA ALGORITMICA: Sezione DOCS sempre presente ───
+      if (!areaMap['DOCS'].report || areaMap['DOCS'].report.trim() === '') {
+        console.log('Orchestratore: sezione DOCS assente, aggiungo placeholder algoritmico.');
+        areaMap['DOCS'] = {
+          summary: 'Analisi saltata',
+          report: "L'analisi è stata saltata in quanto nella repository analizzata non è presente il tag release",
+        };
+      }
+
       // ==========================================
       // FASE 3: MASTER POLISHING (Refining Area by Area)
       // ==========================================
@@ -138,7 +147,10 @@ export const orchestratorHandler = async (event: any) => {
         console.log(`Orchestratore: polishing area ${area}...`);
 
         let polishedReport = data.report;
-        if (MASTER_LEAD_ID !== 'UNSET') {
+        // Evitiamo il polishing se è un messaggio algoritmico fisso
+        const isSkippedDocs = area === 'DOCS' && data.summary === 'Analisi saltata';
+
+        if (MASTER_LEAD_ID !== 'UNSET' && !isSkippedDocs) {
           try {
             polishedReport = await invokeSubAgent(
               MASTER_LEAD_ID,
@@ -158,13 +170,14 @@ export const orchestratorHandler = async (event: any) => {
           }
         }
 
-        const dynamicSummary =
-          extractFirstMeaningfulLine(
-            polishedReport,
-            /[📊🏆📘⚖️⚠️🔍🧪🛠️🔴🟠🟡]/g,
-          ) ||
-          data.summary ||
-          'Analisi completata.';
+        const dynamicSummary = isSkippedDocs
+          ? data.summary
+          : extractFirstMeaningfulLine(
+              polishedReport,
+              /[📊🏆📘⚖️⚠️🔍🧪🛠️🔴🟠🟡]/g,
+            ) ||
+            data.summary ||
+            'Analisi completata.';
 
         analysisDetails.push({
           agentName: area,

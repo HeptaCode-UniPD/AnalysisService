@@ -8,14 +8,12 @@ export class AppService {
     payload: AnalysisRequestDto,
   ): Promise<{ executionArn: string; jobId: string }> {
     console.log(
-      'Validazione superata automaticamente. Avvio reale Step Function per repo:',
-      payload.repoUrl,
+      `Avvio reale Step Function per repo: ${payload.repoUrl} con jobId: ${payload.jobId}`,
     );
 
     const executionArn = await startStepFunctionExecution(payload);
-    // L'ultimo segmento dell'ARN di esecuzione è il nome dell'esecuzione (jobId)
-    const jobId = executionArn.split(':').pop() || 'unknown';
 
-    return { executionArn, jobId };
+    // Restituiamo il jobId ricevuto in input
+    return { executionArn, jobId: payload.jobId };
   }
 }

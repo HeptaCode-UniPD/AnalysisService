@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsUrl } from 'class-validator';
+import { IsString, IsNotEmpty, IsUrl, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AnalysisRequestDto {
@@ -9,4 +9,28 @@ export class AnalysisRequestDto {
   @IsUrl()
   @IsNotEmpty()
   repoUrl!: string;
+
+  @ApiProperty({
+    description: 'ID univoco del job fornito dal chiamante',
+    example: 'job-esterno-12345',
+  })
+  @IsString()
+  @IsNotEmpty()
+  jobId!: string;
+
+  @ApiProperty({
+    description: 'Hash del commit specifico da analizzare (opzionale)',
+    example: 'abcdef1234567890',
+  })
+  @IsString()
+  @IsOptional()
+  commitSha!: string;
+
+    @ApiProperty({
+    description: 'URL del servizio che invoca l\'analisi',
+    example: 'https://codeguardian/microservizio/management',
+  })
+  @IsUrl()
+  @IsNotEmpty()
+  ms1Url!: string;
 }

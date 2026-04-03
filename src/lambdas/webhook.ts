@@ -1,6 +1,6 @@
 // Modifica suggerita per src/lambdas/webhook.ts
 export const handler = async (event: any) => {
-  const { report, repoUrl } = event;
+  const { report, repoUrl, jobId, commitSha } = event;
   const apiKey = process.env.DESTINATION_API_KEY;
   const webhookUrl = process.env.DESTINATION_URL;
 
@@ -13,7 +13,9 @@ export const handler = async (event: any) => {
   // 2. Unisci il report originale con il repoUrl
   const finalPayload = {
     ...report,
-    repoUrl: repoUrl
+    repoUrl: repoUrl,
+    jobId: jobId,
+    commitSha: commitSha
   };
 
   try {

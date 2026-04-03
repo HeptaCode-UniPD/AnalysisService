@@ -1,7 +1,7 @@
 export const handler = async (event: any) => {
   console.log('Payload ricevuto:', JSON.stringify(event));
 
-  const { jobId, errorInfo } = event;
+  const { jobId, errorInfo, repoUrl } = event;
 
   // Cerchiamo sia la versione maiuscola che minuscola per compatibilità totale
   const errorType = errorInfo?.Error || errorInfo?.error || 'UnknownError';
@@ -22,6 +22,7 @@ export const handler = async (event: any) => {
 
   const payload = {
     jobId,
+    repoUrl,
     status: 'failed',
     errorType: errorType,
     // Proviamo a estrarre un messaggio leggibile dalla 'cause' (che spesso è una stringa JSON)

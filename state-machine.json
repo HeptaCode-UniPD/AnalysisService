@@ -6,9 +6,10 @@
     "Initialize": {
       "Type": "Pass",
       "Assign": {
-        "jobId": "{% $states.context.Execution.Name %}",
+        "jobId": "{% $states.input.jobId %}",
         "repoUrl": "{% $states.input.repoUrl %}",
-        "s3Prefix": "{% 'repos/' & $states.context.Execution.Name %}"
+        "commitSha": "{% $states.input.commitSha %}",
+        "s3Prefix": "{% 'repos/' & $states.input.jobId %}"
       },
       "Next": "MainAnalysisProcess"
     },
@@ -27,6 +28,7 @@
                 "Payload": {
                   "jobId": "{% $jobId %}",
                   "repoUrl": "{% $repoUrl %}",
+                  "commitSha": "{% $commitSha %}",
                   "s3Prefix": "{% $s3Prefix %}"
                 }
               },
@@ -43,7 +45,8 @@
               "Assign": {
                 "s3Bucket": "{% $states.result.Payload.s3Bucket %}",
                 "s3Key": "{% $states.result.Payload.s3Key %}",
-                "repoMetadata": "{% $states.result.Payload.repoMetadata %}"
+                "repoMetadata": "{% $states.result.Payload.repoMetadata %}",
+                "resolvedCommitSha": "{% $states.result.Payload.commitSha %}"
               },
               "Next": "Orchestrator Planning"
             },
@@ -156,7 +159,8 @@
                 "Payload": {
                   "report": "{% $finalReport %}",
                   "jobId": "{% $jobId %}",
-                  "repoUrl": "{% $repoUrl %}"
+                  "repoUrl": "{% $repoUrl %}",
+                  "commitSha": "{% $resolvedCommitSha %}"
                 }
               },
               "End": true
@@ -170,6 +174,7 @@
           "Next": "Handle Failure",
           "Output": {
             "jobId": "{% $jobId %}",
+            "repoUrl": "{% $repoUrl %}",
             "errorInfo": "{% $states.errorOutput %}"
           }
         }

@@ -43,6 +43,7 @@ build:
     exclude:
       - '@aws-sdk/*'
     external:
+      - 'class-transformer/storage'
       - repomix
       - '@strands-agents/sdk'
       - '@nestjs/platform-socket.io'

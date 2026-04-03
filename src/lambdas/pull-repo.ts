@@ -12,22 +12,24 @@ function processRepository(
 ): {
   metadata: { hasChangelog: boolean; tags: string[]; branches: string[] };
   zipBuffer: Buffer;
+  actualCommitSha: string;
 } {
-  // 1. Clona e fai il checkout
+  // 1. Clona il repository
   execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
+  
+  // 2. Checkout obbligatorio: se fallisce, blocchiamo l'esecuzione
   try {
     execSync(`git checkout ${commitSha}`, { cwd: tmpDir, stdio: 'ignore' });
   } catch (e) {
-    console.warn(
-      `ATTENZIONE: Checkout di ${commitSha} fallito. Procedo con il ramo di default.`,
-    );
+    throw new Error(`Checkout fallito: il commit ${commitSha} non esiste in questa repository.`);
   }
 
-  // 2. Estrai i metadati necessari
+  // Estraiamo l'hash effettivo per conferma
+  const actualCommitSha = execSync('git rev-parse HEAD', { cwd: tmpDir }).toString().trim();
+  
+  // 3. Estrai i metadati necessari
   const tagsOutput = execSync('git tag', { cwd: tmpDir }).toString().trim();
-  const branchesOutput = execSync('git branch -r', { cwd: tmpDir })
-    .toString()
-    .trim();
+  const branchesOutput = execSync('git branch -r', { cwd: tmpDir }).toString().trim();
 
   const repoMetadata = {
     hasChangelog:
@@ -38,20 +40,18 @@ function processRepository(
       : [],
   };
 
-  // 3. FIX: Rimuovi la cartella .git! Evita che adm-zip fallisca a causa di symlinks e file read-only
+  // 4. Rimuovi la cartella .git per evitare crash di adm-zip
   const gitDir = `${tmpDir}/.git`;
   if (existsSync(gitDir)) {
     rmSync(gitDir, { recursive: true, force: true });
   }
 
-  // 4. Crea lo zip
+  // 5. Crea lo zip in memoria
   const zip = new AdmZip();
   zip.addLocalFolder(tmpDir);
-
-  // 5. FIX: Restituisci direttamente il buffer in memoria anziché scrivere su disco
   const zipBuffer = zip.toBuffer();
 
-  return { metadata: repoMetadata, zipBuffer };
+  return { metadata: repoMetadata, zipBuffer, actualCommitSha };
 }
 
 export const handler = async (event: any) => {
@@ -65,7 +65,7 @@ export const handler = async (event: any) => {
   const tmpDir = `/tmp/repo-${jobId}`;
 
   try {
-    const { metadata, zipBuffer } = processRepository(
+    const { metadata, zipBuffer, actualCommitSha } = processRepository(
       repoUrl,
       commitSha,
       tmpDir,
@@ -87,6 +87,7 @@ export const handler = async (event: any) => {
       s3Bucket: bucketName,
       s3Key: s3Key,
       repoMetadata: metadata,
+      commitSha: actualCommitSha,
     };
   } catch (error: any) {
     console.error('Errore esecuzione Lambda:', error);

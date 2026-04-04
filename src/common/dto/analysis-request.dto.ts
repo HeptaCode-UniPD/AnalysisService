@@ -25,12 +25,4 @@ export class AnalysisRequestDto {
   @IsString()
   @IsOptional()
   commitSha!: string;
-
-    @ApiProperty({
-    description: 'URL del servizio che invoca l\'analisi',
-    example: 'https://codeguardian/microservizio/management',
-  })
-  @IsUrl()
-  @IsNotEmpty()
-  ms1Url!: string;
 }

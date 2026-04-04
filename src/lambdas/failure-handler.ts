@@ -21,16 +21,9 @@ export const handler = async (event: any) => {
   }
 
   const payload = {
-    jobId,
-    repoUrl,
-    status: 'failed',
-    errorType: errorType,
-    // Proviamo a estrarre un messaggio leggibile dalla 'cause' (che spesso è una stringa JSON)
-    message: errorCause
-      ? typeof errorCause === 'string'
-        ? errorCause
-        : JSON.stringify(errorCause)
-      : 'Errore imprevisto nella pipeline.',
+    jobId: jobId,
+    repoUrl: repoUrl,
+    status: 'error'
   };
 
   try {

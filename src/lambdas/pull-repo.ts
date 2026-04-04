@@ -15,7 +15,13 @@ function processRepository(
   actualCommitSha: string;
 } {
   // 1. Clona il repository
-  execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'ignore' });
+  try {
+    execSync(`git clone ${cloneUrl} ${tmpDir}`, { stdio: 'pipe' });
+  } catch (e: any) {
+    // Se fallisce, estraiamo il VERO messaggio di errore di Git
+    const gitError = e.stderr ? e.stderr.toString() : e.message;
+    throw new Error(`Git clone fallito: ${gitError}`);
+  }
   
   // 2. Checkout obbligatorio: se fallisce, blocchiamo l'esecuzione
   try {

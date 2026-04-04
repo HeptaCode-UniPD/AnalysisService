@@ -94,7 +94,7 @@ functions:
     environment:
       DESTINATION_API_KEY: ${ssm:/amerigo/risposta/api-key}
       DESTINATION_URL: ${ssm:/amerigo/url}
-    timeout: 15
+    timeout: 60
 
   orchestrator:
     handler: dist/lambdas/orchestrator-lambda.orchestratorHandler

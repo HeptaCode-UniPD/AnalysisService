@@ -11,12 +11,19 @@ export const handler = async (event: any) => {
   }
 
   // 2. Unisci il report originale con il repoUrl
+// Costruiamo il payload rispettando fedelmente il DTO
   const finalPayload = {
-    ...report,
+    analysisDetails:report.analysisDetails || [],
     repoUrl: repoUrl,
+    commitId: commitSha,
     jobId: jobId,
-    commitSha: commitSha
+    status: 'done'
   };
+
+  // Aggiungi questo log subito prima di "try {" (circa riga 20)
+  console.log('--- DEBUG WEBHOOK ---');
+  console.log('dettagli di analisi saranno tipo:');
+  console.log('Payload:', JSON.stringify(finalPayload.analysisDetails));
 
   try {
     const response = await fetch(webhookUrl, {

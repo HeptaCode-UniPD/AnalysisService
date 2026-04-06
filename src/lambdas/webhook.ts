@@ -1,4 +1,3 @@
-// Modifica suggerita per src/lambdas/webhook.ts
 export const handler = async (event: any) => {
   const { report, repoUrl, jobId, commitSha } = event;
   const apiKey = process.env.DESTINATION_API_KEY;
@@ -10,28 +9,27 @@ export const handler = async (event: any) => {
     );
   }
 
-  // 2. Unisci il report originale con il repoUrl
-// Costruiamo il payload rispettando fedelmente il DTO
+  const payload = report?.Payload ?? report;
+
   const finalPayload = {
-    analysisDetails:report.analysisDetails || [],
+    analysisDetails:payload.analysisDetails || [],
     repoUrl: repoUrl,
     commitId: commitSha,
     jobId: jobId,
     status: 'done'
   };
 
-  // Aggiungi questo log subito prima di "try {" (circa riga 20)
-  console.log('--- DEBUG WEBHOOK ---');
-  console.log('dettagli di analisi saranno tipo:');
-  console.log('Payload:', JSON.stringify(finalPayload.analysisDetails));
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-ms1-key': apiKey,
+  }
+
+  console.log('Headers in invio:', headers);
 
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
+      headers: headers,
       body: JSON.stringify(finalPayload),
     });
 

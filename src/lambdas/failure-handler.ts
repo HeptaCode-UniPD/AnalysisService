@@ -23,7 +23,9 @@ export const handler = async (event: any) => {
   const payload = {
     jobId: jobId,
     repoUrl: repoUrl,
-    status: 'error'
+    status: 'error',
+    errorType: errorType,
+    message: typeof errorCause === 'object' ? JSON.stringify(errorCause) : errorCause,
   };
 
   try {

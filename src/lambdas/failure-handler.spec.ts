@@ -46,7 +46,7 @@ describe('FailureHandler', () => {
     );
     
     const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-    expect(body.status).toBe('failed');
+    expect(body.status).toBe('error');
     expect(body.errorType).toBe('States.TaskFailed');
     expect(body.message).toBe('Access Denied on S3');
   });

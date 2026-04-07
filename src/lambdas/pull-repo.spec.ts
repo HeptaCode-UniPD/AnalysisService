@@ -67,7 +67,7 @@ describe('Lambda: pullRepoToS3', () => {
     expect(rmSync).toHaveBeenCalledTimes(2);
   });
 
-  it('dovrebbe gestire il fallimento di git checkout emettendo un warning', async () => {
+  it('dovrebbe lanciare errore se il checkout fallisce', async () => {
     (existsSync as jest.Mock).mockReturnValue(true);
 
     // Forziamo SOLO il comando git checkout a fallire
@@ -78,12 +78,7 @@ describe('Lambda: pullRepoToS3', () => {
       return Buffer.from('');
     });
 
-    await handler(mockEvent);
-
-    // Verifichiamo che il warning sia stato emesso correttamente
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('ATTENZIONE: Checkout di abcdef123456 fallito'),
-    );
+    await expect(handler(mockEvent)).rejects.toThrow('Checkout fallito');
   });
 
   it('dovrebbe lanciare un errore se manca S3_BUCKET_NAME', async () => {
@@ -101,7 +96,7 @@ describe('Lambda: pullRepoToS3', () => {
 
     // 2. Verifichiamo che la Lambda catturi l'errore e lanci la nuova stringa personalizzata
     await expect(handler(mockEvent)).rejects.toThrow(
-      'Impossibile scaricare o zippare la repository: Git repository not found',
+      'Impossibile scaricare o zippare la repository: Git clone fallito: Git repository not found',
     );
 
     // 3. Verifichiamo che il blocco 'finally' abbia comunque pulito la cartella /tmp
@@ -124,11 +119,13 @@ describe('Lambda: pullRepoToS3', () => {
     (execSync as jest.Mock)
       .mockReturnValueOnce(Buffer.from('')) // git clone
       .mockReturnValueOnce(Buffer.from('')) // git checkout
+      .mockReturnValueOnce(Buffer.from('abc123sha')) // git rev-parse HEAD
       .mockReturnValueOnce(Buffer.from('v1.0.0\nv1.1.0\nv2.0.0')) // git tag
       .mockReturnValueOnce(Buffer.from('  origin/main\n  origin/develop')); // git branch
 
     const result = await handler(mockEvent);
 
+    expect(result.commitSha).toBe('abc123sha');
     expect(result.repoMetadata.tags).toEqual(['v1.0.0', 'v1.1.0', 'v2.0.0']);
     expect(result.repoMetadata.branches).toEqual([
       'origin/main',

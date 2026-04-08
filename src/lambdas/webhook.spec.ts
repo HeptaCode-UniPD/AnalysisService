@@ -1,6 +1,6 @@
 describe('WebhookHandler', () => {
   let webhookHandler: any;
-  const mockReport = { jobId: 'job-webhook-123', status: 'completed', details: [] };
+  const mockReport = { analysisDetails: [] };
 
   beforeEach(() => {
     jest.resetModules();
@@ -26,8 +26,10 @@ describe('WebhookHandler', () => {
     });
 
     const mockEvent = { 
-      report: mockReport, 
-      repoUrl: 'https://github.com/user/repo' 
+      report: { analysisDetails: [] }, 
+      repoUrl: 'https://github.com/user/repo',
+      jobId: 'job-webhook-123',
+      commitSha: 'abc123commit'
     };
     
     const result = await webhookHandler(mockEvent);
@@ -38,11 +40,14 @@ describe('WebhookHandler', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'EXTERNAL_SECURE_KEY',
+          'x-ms1-key': 'EXTERNAL_SECURE_KEY',
         },
         body: JSON.stringify({
-          ...mockReport,
-          repoUrl: 'https://github.com/user/repo'
+          analysisDetails: [],
+          repoUrl: 'https://github.com/user/repo',
+          commitId: 'abc123commit',
+          jobId: 'job-webhook-123',
+          status: 'done'
         }),
       })
     );

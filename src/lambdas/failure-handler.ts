@@ -42,6 +42,7 @@ export const handler = async (event: any) => {
     jobId: jobId,
     status: 'error',
     error: errorMessage
+
   };
 
   try {

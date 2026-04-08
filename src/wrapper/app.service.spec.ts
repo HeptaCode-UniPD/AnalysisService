@@ -13,7 +13,7 @@ describe('AppService', () => {
     jest.clearAllMocks();
   });
 
-  const mockPayload = { repoUrl: 'https://github.com/test', s3Bucket: 'b', s3Key: 'k' };
+  const mockPayload = { repoUrl: 'https://github.com/test', s3Bucket: 'b', s3Key: 'k', jobId: 'job-unique-id', commitSha: 'abc123sha' };
 
   it('dovrebbe innescare l\'analisi corretta e restituire arn e jobId', async () => {
     const mockArn = 'arn:aws:states:us-east-1:12345:execution:AnalysisWorkflow:job-unique-id';

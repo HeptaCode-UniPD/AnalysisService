@@ -1,13 +1,22 @@
 export const handler = async (event: any) => {
   console.log('Payload ricevuto:', JSON.stringify(event));
 
-  const { jobId, errorInfo, repoUrl } = event;
+  const { repoUrl, jobId, commitSha, errorInfo } = event;
 
-  // Cerchiamo sia la versione maiuscola che minuscola per compatibilità totale
   const errorType = errorInfo?.Error || errorInfo?.error || 'UnknownError';
-  const errorCause =
-    errorInfo?.Cause || errorInfo?.cause || 'No specific cause';
+  const errorCause = errorInfo?.Cause || errorInfo?.cause || 'No specific cause';
+  
+  let errorMessage = 'Errore imprevisto nella pipeline.';
 
+  try {
+    // Spesso AWS Step Functions passa "Cause" come stringa JSON. Proviamo a farne il parse.
+    const parsedCause = typeof errorCause === 'string' ? JSON.parse(errorCause) : errorCause;
+    // Estraiamo solo il messaggio pulito
+    errorMessage = parsedCause.errorMessage || parsedCause.message || errorCause;
+  } catch (e) {
+    // Se non è un JSON valido, usiamo la stringa originale
+    errorMessage = typeof errorCause === 'string' ? errorCause : JSON.stringify(errorCause);
+  }
   const webhookUrl = process.env.DESTINATION_URL;
   const apiKey = process.env.DESTINATION_API_KEY;
 
@@ -20,10 +29,19 @@ export const handler = async (event: any) => {
     return;
   }
 
+  const payloadError = [
+    { agentName: 'OWASP', summary: '', report: '' },
+    { agentName: 'TEST', summary: '', report: '' },
+    { agentName: 'DOCS', summary: '', report: '' },
+  ];
+
   const payload = {
-    jobId: jobId,
+    analysisDetails: payloadError,
     repoUrl: repoUrl,
-    status: 'error'
+    commitId: commitSha,
+    jobId: jobId,
+    status: 'error',
+    error: errorMessage
   };
 
   try {
@@ -31,7 +49,7 @@ export const handler = async (event: any) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-ms1-key': apiKey,
       },
       body: JSON.stringify(payload),
     });

@@ -34,7 +34,7 @@ export class AnalysisWebhookPayloadDto {
   repoUrl!: string;
 
   @ApiProperty({
-    description: 'ID o hash del commit analizzato',
+    description: 'ID del commit analizzato',
     example: 'abcdef1234567890',
   })
   commitId!: string;

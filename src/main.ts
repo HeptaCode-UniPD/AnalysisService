@@ -19,6 +19,8 @@ export async function bootstrap() {
       { type: 'apiKey', name: 'x-api-key', in: 'header' },
       'x-api-key',
     )
+    .addServer('http://localhost:3000', 'Locale')
+    .addServer('https://api.ms2.example.com', 'Produzione (Placeholder)')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

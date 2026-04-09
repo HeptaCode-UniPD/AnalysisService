@@ -3,7 +3,7 @@
   "paths": {
     "/analyze": {
       "post": {
-        "description": "\n      Questa operazione avvia una pipeline di analisi asincrona.\n      - **Input**: URL di un repository pubblico.\n      - **Processo**: Esegue Pull Repo -> Bundling -> Analisi AI (Docs, OWASP, Test).\n      - **Output Immediato**: Conferma dell'accodamento con un jobId.\n      - **Output Finale**: Una volta completata (fino a 15 min), il sistema invierà una notifica POST all'URL di Webhook pre-configurato con il report Markdown finale.\n    ",
+        "description": "\n      Questa operazione avvia una pipeline di analisi asincrona.\n      - **Input**: URL di un repository pubblico.\n      - **Processo**: Esegue Pull Repo -> Bundling -> Analisi AI (Docs, OWASP, Test).\n      - **Output Immediato**: Conferma dell'accodamento con un jobId.\n      - **Output Finale (Webhook)**: Una volta completata (fino a 15 min), il sistema invierà una notifica POST all'URL di Webhook pre-configurato.\n      \n      Il payload inviato al Webhook seguirà lo schema 'AnalysisWebhookPayloadDto'.\n    ",
         "operationId": "AppController_startAnalysis",
         "parameters": [],
         "requestBody": {
@@ -27,8 +27,14 @@
               }
             }
           },
+          "400": {
+            "description": "Richiesta non valida. Parametri mancanti o URL non corretto."
+          },
           "401": {
             "description": "API Key mancante o non valida."
+          },
+          "500": {
+            "description": "Errore interno del server durante l'avvio della pipeline."
           }
         },
         "security": [
@@ -50,7 +56,16 @@
     "contact": {}
   },
   "tags": [],
-  "servers": [],
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Locale"
+    },
+    {
+      "url": "https://api.ms2.example.com",
+      "description": "Produzione (Placeholder)"
+    }
+  ],
   "components": {
     "securitySchemes": {
       "x-api-key": {
@@ -60,6 +75,74 @@
       }
     },
     "schemas": {
+      "AnalysisDetailDto": {
+        "type": "object",
+        "properties": {
+          "agentName": {
+            "type": "string",
+            "description": "Nome dell'area o dell'agente (OWASP, TEST, DOCS)",
+            "example": "OWASP"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Breve sintesi dell'esito dell'analisi",
+            "example": "Trovate 3 vulnerabilità critiche."
+          },
+          "report": {
+            "type": "string",
+            "description": "Report completo in formato Markdown",
+            "example": "### Vulnerabilità...\n..."
+          }
+        },
+        "required": [
+          "agentName",
+          "summary",
+          "report"
+        ]
+      },
+      "AnalysisWebhookPayloadDto": {
+        "type": "object",
+        "properties": {
+          "analysisDetails": {
+            "description": "Lista dei dettagli granulari per ogni area di analisi",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalysisDetailDto"
+            }
+          },
+          "repoUrl": {
+            "type": "string",
+            "description": "URL del repository analizzato",
+            "example": "https://github.com/HeptaCode-UniPD/AnalysisService.git"
+          },
+          "commitId": {
+            "type": "string",
+            "description": "ID o hash del commit analizzato",
+            "example": "abcdef1234567890"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "ID univoco del job di analisi",
+            "example": "job-esterno-12345"
+          },
+          "status": {
+            "type": "string",
+            "description": "Stato finale della pipeline",
+            "example": "done",
+            "enum": [
+              "done",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "analysisDetails",
+          "repoUrl",
+          "commitId",
+          "jobId",
+          "status"
+        ]
+      },
       "AnalysisRequestDto": {
         "type": "object",
         "properties": {
@@ -67,10 +150,21 @@
             "type": "string",
             "description": "URL del repository GitHub/GitLab da analizzare",
             "example": "https://github.com/HeptaCode-UniPD/AnalysisService.git"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "ID univoco del job fornito dal chiamante per tracciamento",
+            "example": "job-esterno-12345"
+          },
+          "commitSha": {
+            "type": "string",
+            "description": "Hash del commit specifico da analizzare (opzionale)",
+            "example": "abcdef1234567890"
           }
         },
         "required": [
-          "repoUrl"
+          "repoUrl",
+          "jobId"
         ]
       },
       "AnalysisResponseDto": {
